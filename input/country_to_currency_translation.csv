@@ -1,0 +1,25 @@
+country_long,country_short,currency,comment
+China,CHN,CNY,
+India,IND,INR,
+Japan,JPN,JPY,
+United States,USA,USD,
+United Kingdom,GBR,GBP,
+Austria,AUT,EUR,EA-19
+Belarus,BEL,EUR,EA-19
+Cyprus,CYP,EUR,EA-19
+Estonia,EST,EUR,EA-19
+Finland,FIN,EUR,EA-19
+France,FRA,EUR,EA-19
+Germany,DEU,EUR,EA-19
+Greece,GRC,EUR,EA-19
+Irland,IRL,EUR,EA-19
+Italy,ITA,EUR,EA-19
+Latvia,LVA,EUR,EA-19
+Lithuania,LTU,EUR,EA-19
+Luxembourg,LUX,EUR,EA-19
+Malta,MLT,EUR,EA-19
+Netherlands,NLD,EUR,EA-19
+Portugal,PRT,EUR,EA-19
+Slovakia,SVK,EUR,EA-19
+Slovenia,SVN,EUR,EA-19
+Spain,ESP,EUR,EA-19

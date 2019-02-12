@@ -1,0 +1,1068 @@
+---
+title: "Learning rates paper"
+subtitle: "Preliminary results 2 - Not for publication!"
+output:
+  pdf_document:
+    highlight: zenburn
+    keep_tex: yes
+    number_sections: yes
+    toc_depth: 2
+  html_notebook: default
+params:
+  capacity_threshold: 5
+  delta: "IRENA" # BNEF or IRENA
+  lead_currency: "USD"
+  debug: FALSE
+bibliography: bib_lc.bib
+---
+
+```{r Setup, echo=FALSE, include=FALSE}
+
+# to accept these relevant currencies, they need to be in the currency_translation table
+relevant_currencies <- c("CNY","EUR","GBP","INR","JPY","USD")
+
+plot_order_currency <- relevant_currencies
+plot_order_country <- c("China", "Euro Area", "United Kingdom", "India", "Japan", "United States", "ROW")
+plot_order_linetype <- c("dotdash", "longdash", "dashed", "dotted", "twodash", "solid")
+
+
+intervals <- list(
+  c(2006,2011),
+  c(2012,2016),
+  c(2006,2016)
+)
+
+fig.width.baseline <- 7
+out.width.default <- "100%"
+
+
+combined_plot_interval <- "2006-2016"
+
+```
+
+```{r Init, echo=FALSE, include=FALSE}
+
+library(knitr)
+library(ggsci)
+library(ggplot2)
+library(plyr)
+library(dplyr)
+library(lubridate) # year function
+library(reshape2) # melt function
+library(gridExtra)
+
+
+#knitr::opts_chunk$set(fig.pos = 'h')
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+theme_set(theme_bw(base_size = 9.5) + theme(legend.title=element_blank()))
+
+source("functions_learning.R")
+
+
+# T0 is the start year and T_max the end year of the interval
+# lead currency is the currency of the learning rate
+T0 <- min(unlist(intervals))
+T_max <- max(unlist(intervals))
+
+lead_currency <- params$lead_currency
+
+n_relevant_currencies <- length(relevant_currencies)
+currencies_print <- paste(relevant_currencies, collapse=", ")
+all_subset_intervals <- list(
+  i0 = c(paste0(T0,"-01-01"), paste0(T_max,"-01-02"))
+)
+
+
+
+names(intervals) <- make_interval_names(intervals)
+
+
+# Calculate learning rate for each currency
+n_intervals <- length(intervals)
+n_relevant_currencies <- length(relevant_currencies)
+  
+```
+Date: \today
+
+# Results for PV -- in lead currency `r lead_currency` & with `r params$delta` marketshare 
+
+Here, we present an improved approach that uses global market shares (in this document based on data from `r params$delta`) and a correction factor to calculate a global learning rate that is the same over all currencies. We chose `r n_relevant_currencies` relevant currencies (`r currencies_print`) and calculate a learning rate between `r T0` and `r T_max`. We look only at PV projects above `r params$capacity_threshold` MW.
+
+```{r Load BNEF data, echo=FALSE, warning=FALSE,}
+
+exchangerate_reference_month <- 1
+
+# Use the nominal values of PV and defalte afterwards. Use the financing date
+
+setClass('myDate')
+setAs("character","myDate", function(from) as.Date(from, format="%Y-%m-%d") )
+
+data_all <- read.csv("input/data_PV_all_nominal.csv", 
+                     colClasses = c("Financing.Date"="myDate"), 
+                     na.strings=c("","NA"),
+                     stringsAsFactors = F)
+
+data_projects <- select(
+  data_all,
+  id = X...Renewable.Project.ID,
+  capacity = Capacity...total..MWe.,
+  total_local_value = Total.Value..Local.,
+  local_currency_long = Local.Currency,
+  country = Country,
+  date = Financing.Date,
+  status = Status)
+rm(data_all)
+
+
+commissioned_projects <- filter(
+    data_projects, 
+    status == "Commissioned")
+
+relevant_projects <- filter(
+    commissioned_projects,
+    capacity >= params$capacity_threshold,
+    !is.na(date))
+
+non_relevant_projects1 <- filter(
+    commissioned_projects,
+    capacity < params$capacity_threshold)
+
+non_relevant_projects2 <- filter(
+    commissioned_projects,
+    capacity >= params$capacity_threshold,
+    is.na(date))
+
+```
+
+
+```{r Complete currencies in BNEF, echo=FALSE, warning=FALSE, }
+
+# load the currency translation tables and merge them with the data to get the corresponding entries.
+country_to_currency_translation <- read.csv("input/country_to_currency_translation.csv", stringsAsFactors = F)
+currency_to_currency_area_translation <- read.csv("input/currency_to_currency_area_translation.csv", stringsAsFactors = F)
+currency_translation <- read.csv("input/currency_translation.csv", stringsAsFactors = F)
+
+country_short_to_currency <- data.frame(currency = country_to_currency_translation$currency)
+rownames(country_short_to_currency) <- country_to_currency_translation$country_short
+
+currency_to_currency_area_translation <- select(currency_to_currency_area_translation, currency = "X...currency", currency_area)
+
+relevant_projects <- merge(
+  relevant_projects, 
+  select(currency_translation, local_currency = short, local_currency_long = long), 
+  by = "local_currency_long", 
+  all.x = T)
+
+relevant_projects <- merge(
+  relevant_projects, 
+  select(country_to_currency_translation, country = country_long, local_currency_added = currency), 
+  by = "country", 
+  all.x = T)
+
+# replace the NA data in the local_currency column (from the original local_currency info) with the local_currency_added data (from assuming the total_local_value was the main currency in the repsective country)
+relevant_projects$local_currency[is.na(relevant_projects$local_currency)] <- relevant_projects$local_currency_added[is.na(relevant_projects$local_currency)]
+
+# Select final df and add year
+relevant_projects <- select(relevant_projects, date, capacity, total_local_value, local_currency, id)
+relevant_projects$local_currency <- as.factor(relevant_projects$local_currency)
+relevant_projects$year <- year(relevant_projects$date)
+
+## data to be used
+# final data only the ones with costs
+data_with_costs_pre <- filter(
+  relevant_projects,
+  !is.na(total_local_value),
+  !is.na(local_currency),
+  local_currency != "Other"
+)
+
+# Transform costs from Million currency to specific currency/W
+data_with_costs_pre <- transform(data_with_costs_pre, local_value = total_local_value / capacity)
+data_with_costs_pre <- select(data_with_costs_pre, date, capacity, local_value, local_currency, year, id)
+
+# Final selection of data for the market shares (ie. no local value)
+bnef_data <- select(relevant_projects, date, capacity, local_currency, year)
+
+```
+
+
+```{r Outlier treatment}
+
+# Remove specific points manually
+
+outliers.df <- read.csv("input/outliers.csv", stringsAsFactors = F)
+
+colnames(outliers.df) <- c("id", "desc")
+
+
+# Code for looking at single projects
+#data_with_costs_pre[data_with_costs_pre$local_currency == "CNY" & data_with_costs_pre$year < 2008,]
+
+outliers <- data_with_costs_pre$id %in% outliers.df$id
+
+data_with_costs <- data_with_costs_pre[!outliers,]
+
+n_outliers <- nrow(data_with_costs_pre) - nrow(data_with_costs)
+
+# Prepare plot
+
+data_with_outliers <- data_with_costs_pre
+data_with_outliers$outlier <- outliers
+
+overview_plots_after <- list()
+overview_plots_after_boxplot <- list()
+
+
+for (var in unique(data_with_costs$local_currency)) {
+  
+  overview_plots_after[[var]] <- ggplot(data_with_outliers[data_with_outliers$local_currency==var,], aes(date, local_value, shape = outlier, col = outlier)) +
+    geom_point() +
+    scale_shape_manual(values = c(16, 9)) +
+    scale_color_manual(values = c("black", "red")) +
+
+    labs(x = "Year", 
+         y = paste("Costs in", var),
+        subtitle = paste("Projects reported in", var)) +
+    theme(legend.position = "none")
+}
+
+
+rm(data_with_outliers)
+
+```
+
+```{r Statistical number of BNEF}
+
+stats <- list()
+
+# Different BNEF statistics
+stats[["number"]][["all_projects"]] <- nrow(data_projects)
+stats[["capacity"]][["all_projects"]] <- sum(data_projects$capacity, na.rm = T)
+
+stats[["number"]][["commissioned_projects"]] <- nrow(commissioned_projects)
+stats[["capacity"]][["commissioned_projects"]] <- sum(commissioned_projects$capacity, na.rm = T)
+
+stats[["number"]][["relevant_projects"]] <- nrow(relevant_projects)
+stats[["capacity"]][["relevant_projects"]] <- sum(relevant_projects$capacity)
+
+stats[["number"]][["non_relevant_projects1"]] <- nrow(non_relevant_projects1)
+stats[["capacity"]][["non_relevant_projects1"]] <- sum(non_relevant_projects1$capacity)
+
+stats[["number"]][["non_relevant_projects2"]] <- nrow(non_relevant_projects2)
+stats[["capacity"]][["non_relevant_projects2"]] <- sum(non_relevant_projects2$capacity)
+
+stats[["number"]][["relevant_projects_with_costs"]] <- nrow(data_with_costs)
+stats[["capacity"]][["relevant_projects_with_costs"]] <- sum(data_with_costs$capacity)
+
+# Shares
+stats[["number_share"]] <- stats$number/stats[["number"]][["commissioned_projects"]]
+stats[["capacity_share"]] <- stats$capacity/stats[["capacity"]][["commissioned_projects"]]
+
+rm(data_projects, commissioned_projects, non_relevant_projects1, non_relevant_projects2)
+
+```
+
+
+
+```{r Load and prepare IRENA data}
+
+# In this part I transform the IRENA dataset from Tim into a format that is similar to the data object from BNEF.
+irena_data_raw <- read.csv("input/irena-capacity-generation.csv", stringsAsFactors = FALSE)
+
+# Only those projects that are PV and above the threshold
+irena_data <- filter(
+  irena_data_raw, 
+  Product == "Solar photovoltaic" | Product == "Solar Photovoltaic", 
+  Type == "ONG",
+  Capacity..MW. >= params$capacity_threshold)
+
+irena_data <- select(
+  irena_data, 
+  capacity_cum = Capacity..MW.,
+  country = X...ISO, 
+  year = Year)
+
+# new local currency column
+irena_data$local_currency <- NA
+
+# change datatypes
+irena_data$year <- as.numeric(irena_data$year)
+irena_data$capacity_cum <- as.numeric(irena_data$capacity_cum)
+irena_data$local_currency <- as.character(irena_data$local_currency)
+
+# from cummulative to difference. Calculation need ordered dataset
+irena_data$capacity <- irena_data$capacity_cum
+irena_data <- irena_data[order(irena_data$country, irena_data$year),]
+
+# loop through the irena_data and adjust the local_currency
+for(i in 1:nrow(irena_data)){
+  
+  ith_irena_country <- as.character(irena_data[i,"country"])
+
+  # If the country is in the "country_to_currency_translation" list, it is relevant (rest ROW)
+  if(ith_irena_country %in% rownames(country_short_to_currency)){
+    irena_data[i,"local_currency"] <- as.character(country_short_to_currency[ith_irena_country,"currency"])
+  } else {
+    irena_data[i,"local_currency"] <- "Other"
+  }
+
+
+  # Calculate difference (instead of cummulative capacity)
+  if (i > 1){
+
+    if(irena_data[i-1,"country"] == irena_data[i,"country"]){
+      irena_data[i,"capacity"] <- irena_data[i,"capacity_cum"] - irena_data[i-1,"capacity_cum"]
+    }   
+  }  
+}
+
+rm(i,ith_irena_country)
+
+```
+
+```{r Prepare ERs and deflators}
+
+# Functions to convert the format of CPI and bloomberg
+
+convert_year_to_date <- function(year){
+  
+  # take the middle day
+  deflator_date <- as.Date(paste("02.07.", year),format = "%d.%m.%Y")
+  return(deflator_date)
+
+}
+
+convert_location_to_currency <- function(location){
+  
+  location_currency_translation <- list(
+  "USA" = "USD",
+  "EA19" = "EUR",
+  "GBR" = "GBP",
+  "JPN" = "JPY",
+  "CHN" = "CNY",
+  "IND" = "INR")
+  
+  currency <- NA
+
+  if(location %in% names(location_currency_translation)){
+    currency <- location_currency_translation[[location]]
+  }
+  return(currency)
+  
+} 
+
+## Deflators
+# load yearly deflators
+cpi_deflators <- read.csv("input/OECD_CPI_yearly.csv", stringsAsFactors = F)
+cpi_deflators <- select(cpi_deflators, country = X...LOCATION, year = TIME, value = Value)
+cpi_deflators$year <- as.numeric(cpi_deflators$year)
+
+# change the values to the reference year (2017)
+cpi_deflators_index_year <- select(filter(cpi_deflators, year == 2017), country, value_index = value)
+cpi_deflators <- merge(cpi_deflators, cpi_deflators_index_year)
+
+# add new variables (currency and indexed value)
+cpi_deflators <- mutate(
+  cpi_deflators, 
+  currency = sapply(country, convert_location_to_currency),
+  defl = value / value_index)
+
+# prepare final deflator object
+defl <- select(cpi_deflators, year, currency, defl)
+defl <- filter(defl, !is.na(currency))
+defl$currency <- as.factor(defl$currency)
+
+rm(cpi_deflators_index_year, cpi_deflators)
+
+
+## Exchange rates
+exchange_rates_pre <- read.csv("input/exchange_rates_nominal.csv")
+
+exchange_rates_USD <- select(exchange_rates_pre,date = X...Date, 
+                         EUR = EUR.USD, 
+                         GBP = GBP.USD, 
+                         CHF = CHF.USD, 
+                         INR = IND.USD,
+                         JPY = JPY.USD,
+                         CNY = CNY.USD)
+rm(exchange_rates_pre)
+
+exchange_rates_USD <- exchange_rates_USD[exchange_rates_USD$date!="",]
+exchange_rates_USD$USD <- 1
+exchange_rates_USD$date <- as.Date(exchange_rates_USD$date, format = "%d.%m.%y")
+exchange_rates_USD <- select(exchange_rates_USD, date, relevant_currencies)
+
+# Generate exchange rates in every relevant currency. Lead currency of the dataset is USD
+# TODO: simplyfy to just the lead currency to save time
+
+all_exchange_rates <- list()
+
+# with c_lead as lead currency
+for(c_lead in relevant_currencies){
+
+  # assign empty dataframe with all relevant currencies
+  all_exchange_rates[[c_lead]] <- exchange_rates_USD
+  all_exchange_rates[[c_lead]][relevant_currencies] <- NA 
+
+  # with c_curr as the other currency
+  for(c_curr in relevant_currencies){
+  
+    # c_curr/c_lead = c_curr/USD (column c_curr in relevant_exchange_rates) * (c_lead/USD)^-1 (column c_lead in relevant_exchange_rates)
+    
+    # replace the USD values with the calulated ones.
+    all_exchange_rates[[c_lead]][[c_curr]] <- exchange_rates_USD[,c_curr] * exchange_rates_USD[,c_lead]^(-1)
+
+  }
+}
+
+# Select the lead currencies exchange rate
+exchange_rates <- all_exchange_rates[[lead_currency]]
+
+
+```
+
+
+```{r Calculate cummulative sums}
+
+# x_global = sum of xj = total capacity per year.
+x_global_BNEF <- aggregate(bnef_data$capacity, list(year = bnef_data$year), sum)
+x_global_IRENA <- aggregate(irena_data$capacity, list(year = irena_data$year), sum)
+
+## X: global cumulative deployment in year t -> cummulative sum of x_global (sum of xj) per year
+# use cummulative capacity from BNEF because they relate to the average costs and projects.
+x_global <- x_global_BNEF
+X <- cumsum(x_global$x) 
+X <- data.frame(
+  year = x_global$year,
+  X = X
+)
+
+```
+
+## Simple learning rates in different currencies 
+In Table 3 & 4 and Figure 2, we present the results of the simple learning rate approach.
+
+```{r Calculate simple learning rates}
+
+# add columns for each currency
+data_with_costs[relevant_currencies] <- NA
+
+for(j in 1:nrow(data_with_costs)){
+
+  # finds closest date in exchange_rates$date vector to data_with_costs[j,"date"]
+  # -> this is the date that is used for the exchange rate
+  day_differences <- abs(exchange_rates$date - data_with_costs[j,"date"])
+  er_date <- which(abs(day_differences) == min(day_differences, na.rm=TRUE))[1] 
+  
+  data_with_costs[j, lead_currency] <- data_with_costs[j,"local_value"] * exchange_rates[er_date, as.character(data_with_costs[j,"local_currency"])] # nominal
+  
+  for(relevant_currency in relevant_currencies){
+    if(relevant_currency!=lead_currency){
+      # make columns for the other currencies and devide by the lead currency value (just calculated by the respective exchange rate)
+      data_with_costs[j, relevant_currency] <- data_with_costs[j, lead_currency] / exchange_rates[er_date,relevant_currency]
+    }
+  }
+}
+
+
+# C_global are the aggregated means of all(!) projects (no subset)
+global_means_pre <- aggregate(data_with_costs[relevant_currencies], list(year = data_with_costs$year), mean)
+global_means <- melt(global_means_pre, id.vars = "year", variable.name = "currency", value.name = "global_means")
+global_means$year <- as.character(global_means$year)
+global_means$currency <- as.character(global_means$currency)
+
+# Transform to 2017 units
+C_global_2017 <- merge(global_means, defl, all.x = T, all.y = F)
+C_global_2017 <- transform(C_global_2017, global_means_2017 = global_means / defl)
+C_global_2017$currency <- as.factor(C_global_2017$currency)
+
+simple_learning_rates_matrix <- matrix(ncol = n_intervals, nrow = n_relevant_currencies)
+simple_learning_rates_rsquared_matrix <- simple_learning_rates_matrix
+
+for(i in 1:n_intervals){
+  interval <- intervals[[i]]
+  interval_years <- as.numeric(interval[1]):as.numeric(interval[2])
+  
+
+  for(j in 1:n_relevant_currencies){
+    this_currency <- relevant_currencies[[j]]
+  
+    subset <- subset(C_global_2017, currency == this_currency)
+    
+    regression_costs <- subset[subset$year %in% interval_years, ]$global_means_2017
+    regression_cumulative_capacity <- X[X$year %in% interval_years, ]$X
+    
+    learning_rate_list <- calculate_learning_rate(regression_costs, regression_cumulative_capacity)
+    
+    simple_learning_rates_matrix[j,i] <- learning_rate_list$learning_rate
+    simple_learning_rates_rsquared_matrix[j,i] <- learning_rate_list$rsquared
+
+  }
+}
+
+
+simple_learning_rates <- data.frame(simple_learning_rates_matrix)
+rownames(simple_learning_rates) <- relevant_currencies
+colnames(simple_learning_rates) <- names(intervals)
+
+simple_learning_rates_rsquared <- data.frame(simple_learning_rates_rsquared_matrix)
+rownames(simple_learning_rates_rsquared) <- relevant_currencies
+colnames(simple_learning_rates_rsquared) <- names(intervals)
+
+simple_learning_rates_sd <- sapply(simple_learning_rates, sd)
+
+kable(rbind(simple_learning_rates,"sd"=simple_learning_rates_sd), digits=2, caption = "Simple learning rates in all currencies. The SD describes the variation between the different learning rates.")
+kable(simple_learning_rates_rsquared, digits=2, caption = "R-squared values of simple learning rates")
+
+# Figure out the largest difference in learning rates.
+
+#simple_learning_rates_sd[1:3]+simple_learning_rates_sd[4:6]
+#simple_learning_rates_sd[4:6]-simple_learning_rates_sd[1:3]
+
+selected_simple_learning_rates <- simple_learning_rates[,c("2006-2011","2012-2016","2006-2016")]
+
+#taking the largest sum -> largest difference between the different currencies
+
+
+```
+
+
+```{r Learning rate bar graph, fig.cap="Simple learning rates in different intervals.", fig.width=fig.width.baseline * 0.7, fig.asp= 0.7}
+
+selected_simple_learning_rates$currency <- as.factor(rownames(selected_simple_learning_rates))
+ 
+simple_learning_rate_plot_data <- melt(selected_simple_learning_rates, id.vars = "currency", variable.name = "interval", value.name = "lr")
+
+# Grouped
+ggplot(simple_learning_rate_plot_data, aes(fill=currency, y=lr, x=interval)) + 
+    geom_bar(position="dodge", stat="identity") +
+    labs(x = "", 
+       y = paste0("Learning rate")) +
+    guides(fill=guide_legend(title="Currency")) +   
+  scale_fill_npg()
+
+
+
+```
+
+\clearpage
+
+
+## Currency-corrected learning rates
+
+A detailed explanation of the theory behind the currency-corrected learning rates is in Bjarnes note.
+
+
+```{r Calculation of market shares}
+
+# In this section, I use two types of market share calculation. Once from the orignal data and from IRENA. The IRENA data represent global market shares more accurately.
+
+calculate_delta <- function(data, x_global){
+  
+  # x$x = amount deployed with cost reported in currency i, measured in non-monetary terms (e.g., MW installed) in year t
+  x <- aggregate(data$capacity, list(year = data$year, currency = as.character(data$local_currency)), sum)
+  
+  # delta$delta = the share of deployment with cost reported in currency i in year t
+  delta <- data.frame(
+    year = x$year,
+    currency = x$currency,
+    delta = numeric(nrow(x)),
+    stringsAsFactors = FALSE
+  )
+  
+  # add x_global to x (data.frame) and complete the delta calculation
+  for(row in 1:nrow(x_global)){
+    row_year <- x_global[row, "year"]
+    row_x_global <- x_global[row, "x"]
+    x[delta$year == row_year, "x_global"] <- row_x_global
+  }
+  
+  delta <- transform(x, delta = x / x_global)
+  
+  # Check if assumption is met
+  check <- aggregate(delta$delta, list(year = delta$year), sum)
+  
+  for(i_check in length(check)){
+    if(check[i_check, "x"]!=1){
+      print(warning("Sum of deltas is not 1!"))
+    }
+  }
+
+  return(delta)
+  
+}
+
+## Calculate the deltas and use the corresponding global deplyment figures
+delta_BNEF <- calculate_delta(bnef_data, x_global_BNEF)
+delta_IRENA <- calculate_delta(irena_data, x_global_IRENA)
+
+
+# Select the correct delta
+if(params$delta == "IRENA"){
+  delta <- delta_IRENA
+} else {
+  delta <- delta_BNEF
+}
+
+#convert to factor and change order (for better reading)
+delta$currency <- factor(delta$currency, levels = c(relevant_currencies, "Other"))
+
+## Overview and plot
+
+all_years <- as.numeric(T0):as.numeric(T_max)
+
+delta_print <- delta[order(delta$year) & delta$year %in% all_years,] 
+delta_print <- merge(currency_to_currency_area_translation,delta_print)
+
+delta_graph <- delta_print
+delta_graph$currency_area <- as.factor(delta_graph$currency_area)
+delta_graph$currency_area <- factor(delta_graph$currency_area, plot_order_country)
+
+
+colnames(delta_print) <- c("original currency", "currency area", "year","deployment in currency (x)", "sum of deployments", "share (delta)") 
+
+
+delta_plot1 <- ggplot(data=delta_graph, aes(x=year, y=x, fill=currency_area)) +
+  geom_bar( stat='identity') +
+  scale_x_continuous(breaks = seq(2004,2017,1), minor_breaks = NULL) +
+  scale_fill_npg() +
+  labs(x = "", 
+       y = paste0("Added renewable capacity [MW]")) +
+  guides(fill=guide_legend(title="Currency area")) + 
+  theme(axis.text.x = element_text(angle = 90, hjust = 1,vjust = 0.5 ))
+
+delta_plot2 <- ggplot(data=delta_graph, aes(x=year, y=delta, fill=currency_area)) +
+  geom_bar(position = "fill", stat='identity') +
+  scale_x_continuous(breaks = seq(2004,2017,1), minor_breaks = NULL) +
+  scale_fill_npg() +
+  labs(x = "", 
+       y = paste0("Global share of added renewable capacity")) +
+  guides(fill=guide_legend(title="Currency area")) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1,vjust = 0.5), legend.position="none")
+
+delta_plot_legend <- get_legend(delta_plot1)
+delta_plot1 <- delta_plot1 + theme(legend.position="none")
+
+
+
+
+```
+
+
+```{r Calculation of C,w and P}
+
+## C: observed average cost per MW in currency i in year t (i.e. subsets of all projects -> list) 
+C <- aggregate(data_with_costs$local_value, 
+               list(year = data_with_costs$year, currency = data_with_costs$local_currency), mean)
+colnames(C)[3] <- "C"
+C$year <- as.character(C$year)
+C$currency <- as.character(C$currency)
+
+# Overview of data
+C_stats <- table(C$year,C$currency)
+
+## w: exchange rate between currency i and the lead currency l in price notation
+# e.g. "5 lead-dollars / 1 Euro" 
+
+# Select one exchange rate (based on exchangerate_reference_month)
+selected_exchange_rates <- exchange_rates[seq(exchangerate_reference_month, nrow(exchange_rates), 12),]
+selected_exchange_rates <- transform(selected_exchange_rates, year = year(selected_exchange_rates$date))
+w <- melt(selected_exchange_rates[,-1], id.vars = "year", variable.name = "currency", value.name ="w")
+
+w$year <- as.character(w$year)
+w$currency <- as.character(w$currency)
+w$w <- as.numeric(w$w)
+w$l <- lead_currency
+
+# result per years
+P <- data.frame(
+  "year" = all_years,
+  "P" = numeric(length(all_years))
+)
+
+P_tilde <- P
+P_real <- P
+P_tilde_real <- P
+
+# alpha per years
+alphas <- data.frame(
+  "year" = all_years,
+  "alpha" = numeric(length(all_years))
+)
+
+# Loop through all years and currencies to calculate P's
+for(t in all_years){
+  
+  for(i in relevant_currencies){
+  
+    # CHECK: necessary?
+    ignore_currency <- F
+
+    # variables for currency i = current_currency and year = T_max
+    delta_i_t <- subset(delta, year == t & currency == i)$delta
+    w_i_t <- subset(w, year == t & currency == i)$w
+    w_i_0 <- subset(w, year == T0 & currency == i)$w
+    C_i_t <- subset(C, year == t & currency == i)$C
+    
+    # Missing value mean no capacity in that year and currency
+    if(length(C_i_t)==0){
+      C_i_t <- 0
+    }
+
+    if(length(delta_i_t)==0){
+      if(params$debug){
+        print(paste("No delta data for", i, "in", t,". Delta is set to 0."))
+      }
+      delta_i_t <- 0
+    }
+    
+    if(!ignore_currency){
+      
+      # weighted average global cost converted to lead currency l in year t
+      P[P$year == t, "P"] <- P[P$year == t, "P"] + delta_i_t * w_i_t * C_i_t
+      P_tilde[P_tilde$year == t, "P"] <- P_tilde[P_tilde$year == t, "P"] + delta_i_t * w_i_0 * C_i_t
+      
+    }
+    
+  } # end currency loop
+  
+  alphas[alphas$year == t, "alpha"] <- P_tilde[P_tilde$year == t, "P"]  / P[P$year == t, "P"]
+  
+  # Transform to real values
+  defl_l_t <- subset(defl, year == T_max & currency == lead_currency)$defl
+  P_real[P_real$year == t, "P"] <- P[P$year == t, "P"] / defl_l_t
+  P_tilde_real[P_tilde_real$year == t, "P"] <- P_tilde[P_tilde$year == t, "P"] / defl_l_t
+  
+  
+} # end year loop
+
+
+## Calculate learning rate based on new costs and cummulative capacity
+
+corrected_learning_rates_list <- list()
+corrected_learning_rates_data_list <- list()
+corrected_learning_rates_rsquared_list <- list()
+
+types <- c("unadjusted","adjusted")
+
+for(type in types){
+  corrected_learning_rates_list[[type]] <- list()
+  corrected_learning_rates_data_list[[type]] <- list()
+  corrected_learning_rates_rsquared_list[[type]] <- list()
+  
+  for(i in 1:n_intervals){
+    interval <- intervals[[i]]
+   
+    interval_years <- as.numeric(interval[1]):as.numeric(interval[2])
+    interval_name <- names(intervals[i])
+    
+    if(type == "unadjusted"){
+      relevant_P <- P_real
+    } else {
+      relevant_P <- P_tilde_real
+    }
+
+    regression_costs <- relevant_P[relevant_P$year %in% interval_years, ]$P
+    regression_cumulative_capacity <- X[X$year %in% interval_years, ]$X
+    
+    l <- calculate_learning_rate(regression_costs, regression_cumulative_capacity)
+    
+    corrected_learning_rates_list[[type]][[interval_name]] <- l$learning_rate
+    corrected_learning_rates_rsquared_list[[type]][[interval_name]] <- l$rsquared
+
+    
+    corrected_learning_rates_data_list[[type]][[interval_name]] <- data.frame(
+      rsquared = l$rsquared,
+      lead_currency = lead_currency,
+      years = interval_years,
+      capacity = regression_cumulative_capacity,
+      costs = regression_costs,
+      alpha = alphas[alphas$year %in% interval_years, ],
+      type = type,
+      interval = interval_name
+    )
+  
+  }
+}
+
+```
+
+A regression over $P_{t,2017}^l$ gives us the **un**adjusted global learning rates in `r lead_currency`,. The **un**adjusted rate includes both technological learning and changes in exchange rates. Therefore, it is different in different lead currencies. To get the same number in every lead currency (i.e. a truly global learning rate), we adjust the unadjusted global learning rate for the currency effect. Applying $\alpha$ to the learning rate calculation results in the adjusted global learning rate. The adjusted rate only includes technological learning. The corresponding learning curves are depicted in Figure 1.
+
+
+```{r Results table}
+
+corrected_learning_rates <- matrix(unlist(corrected_learning_rates_list), ncol = n_intervals, byrow = TRUE)
+corrected_learning_rates_rsquared <- matrix(unlist(corrected_learning_rates_rsquared_list), ncol = n_intervals, byrow = TRUE)
+
+colnames(corrected_learning_rates) <- names(intervals)
+rownames(corrected_learning_rates) <- types
+
+colnames(corrected_learning_rates_rsquared) <- names(intervals)
+rownames(corrected_learning_rates_rsquared) <- types
+
+kable(corrected_learning_rates, caption = paste("Global learning rates in lead currency", lead_currency))
+kable(corrected_learning_rates_rsquared, caption = "R-squared of global learning rates")
+
+
+```
+
+
+```{r Plot of learning curves, fig.cap="Plot of the currency-corrected learning curve in 3 intervals", fig.width=fig.width.baseline * 0.8, fig.asp=0.6}
+
+
+data_for_plots <- do.call("rbind", corrected_learning_rates_data_list$adjusted)
+
+ggplot(data_for_plots, aes(capacity/1000, costs)) +
+  geom_smooth(mapping = aes(col = interval, linetype = interval), method="lm", formula = (y ~ x), se=FALSE) +
+  geom_point(data=. %>% filter(interval==combined_plot_interval), col = "black") +
+  geom_text(data=. %>% filter(interval==combined_plot_interval), col = "black", aes(label=years), hjust=1.3, vjust=1, size=2.5, alpha = 0.8) +
+  scale_x_continuous(trans="log", breaks = c(c(1,seq(0,10,2)) %o% 10^(0:4)), minor_breaks = seq(0,1,by = 0.5)) +
+  scale_y_continuous(trans="log", breaks = c(2:10 %o% 10^(0:4))) +
+  labs(x = "Cumulative capacity [GW]", 
+       y = paste0("Weighted average costs [2017-", lead_currency, " / W]")) +
+  guides(colour=guide_legend(title="Interval"),linetype=guide_legend(title="Interval")) +
+  theme(
+    axis.text.x = element_text(angle = 90, hjust = 1))
+ 
+```
+
+
+
+```{r Combined plot, fig.cap="Comparison of the simple (thin lines) and currency-corrected (think line) learning rates.", fig.width=fig.width.baseline * 0.8, fig.asp=0.6}
+
+# adjusted currency corrected average costs
+combined_plot_data <- select(
+  corrected_learning_rates_data_list$adjusted[[combined_plot_interval]],
+  year = years, 
+  average_costs = costs, 
+  currency = lead_currency, 
+  cumulative_capacity = capacity,
+  type)
+
+# simple method average costs
+C_global_2017_plotdata <- merge(C_global_2017,X)
+C_global_2017_plotdata_selected <- select(
+  C_global_2017_plotdata, 
+  year, 
+  average_costs = global_means, 
+  currency, 
+  cumulative_capacity = X)
+C_global_2017_plotdata_selected$type <- "simple"
+
+# combine C_global_2017 (simple) and data_adjusted (currency-corrected) to combined_plot_data and filter for relevant years.
+combined_plot_data <- rbind(combined_plot_data, C_global_2017_plotdata_selected)
+combined_plot_data <- filter(combined_plot_data, year >= T0, year <= T_max)
+combined_plot_data$currency <- factor(combined_plot_data$currency,plot_order_currency) # order
+
+rm(C_global_2017_plotdata_selected, C_global_2017_plotdata)
+
+
+## Norm with one random project to make the combined plot. This gives us an index if that one project of 10 MW.
+# Set the norm_project
+norm_project <- subset(data_with_costs, year == "2010")[1,]
+norm_projects <- melt(norm_project[,c(relevant_currencies)], variable.name = "currency", value.name = "norm_value")
+
+combined_plot_data_normed <- merge(combined_plot_data, norm_projects)
+combined_plot_data_normed <- mutate(combined_plot_data_normed, normed_average_costs = average_costs / norm_value)
+combined_plot_data_normed <- combined_plot_data_normed[with(combined_plot_data_normed, order(type, currency, year)),]
+
+
+ggplot(combined_plot_data_normed, aes(cumulative_capacity/1000, normed_average_costs)) +
+  geom_smooth(data=. %>% filter(type=="simple"), aes(col=currency, linetype = currency), lwd=0.6 ,method="lm", formula = (y ~ x), se=FALSE) +
+  geom_smooth(data=. %>% filter(type=="adjusted"), linetype = "solid", lwd=1.3, method="lm", formula = (y ~ x), se=FALSE, col="black") +
+  scale_linetype_manual(values=plot_order_linetype) +
+  scale_x_continuous(trans="log", breaks = c(c(1,seq(2,10,2)) %o% 10^(0:4)), minor_breaks = 0.5) +
+  scale_y_continuous(trans="log", breaks = seq(0,8,0.5), minor_breaks = NULL) +
+  labs(x = "Cumulative capacity [GW]", 
+       y = paste0("Index of average yearly costs per MW"),
+       subtitle = paste("The data is an index of a project from", norm_project$year, "(financed in", norm_project$local_currency, ",capacity of", norm_project$capacity, "MW)")) +
+  guides(linetype=guide_legend(title="Learning rate"), col=guide_legend(title="Learning rate"), colour=guide_legend(title="Currency")) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  scale_color_npg()
+
+
+
+```
+
+\clearpage
+
+# Appendix
+
+
+## Marketshares (`r params$delta`)
+
+The market share of PV deplyoment in each currency and year is relevant. To calculate the market share of different currencies, we derive delta values from BNEF and IRENA datasets. Figure 1 visualises the market shares as a function of the currency.
+
+```{r Marketshare plots, fig.width = 11, fig.cap = "Capacity additions per year and currency area", fig.width=fig.width.baseline, fig.asp=0.45, out.width=out.width.default}
+
+
+grid.arrange(delta_plot1,delta_plot2, delta_plot_legend, ncol=3, widths=c(2.2, 2.2, 0.9))
+
+kable(delta_print, digits=2, caption = "Shares of deployment", row.names = F)
+
+
+```
+
+## Calculation
+
+### calculation of currency-corrected learning rates
+
+We calculate our improved currency-corrected learning rate in the lead currency **`r lead_currency`** The resulting, single learning rate is based on the *weighted average global cost converted to lead currency* $P_{t,2017}^l$. We derive $P_{t,2017}^l$ by:
+
+1. calculating $C_{t}^{i}$, i.e. the yearly means of all costs reported in currency i (a subset of all costs).
+2. weighting the (nominal) average costs $C_{t}^{i}$ in each year $t$ by the market share in year $t$.
+3. converting the weighted average costs to the lead currency.
+4. taking the sum of all weighted costs in the lead.
+5. applying a deflator to get the (real) 2017 costs.
+
+The theoretical input paper by Bjarne describes the calculations in more detail.
+
+### Calculation of Simple learning rates in different currencies 
+
+To calculate the simple learning rates, we convert **all available project costs** to different currencies. We then derive the learning rate for each currency from the global average costs $C_{global,t,2017}^{i}$ of all available projects. We derive $C_{global,t,2017}^{i}$ for each year $t$ and currency $i$ by 
+
+1. converting all project costs (N = `r stats[["number"]][["relevant_projects_with_costs"]]`) to currency $i$,
+2. aggretating these costs (in currency $i$) to yearly means and by
+3. applying a deflator to get the (real) 2017 costs.
+
+## Data
+
+### BNEF
+
+Our analysis is based on the Bloomberg New Energy Finance (BNEF) renewable energy database. The BNEF dataset contains a total of `r stats[["number"]][["all_projects"]]` PV projects, of which `r stats[["number"]][["commissioned_projects"]]` are commissioned. Of those commissioned projects, we consider `r stats[["number"]][["relevant_projects"]]` as relevant because they have a capacity of >= `r params$capacity_threshold` MW, which is an indication that their local-cost component is low. Among the comissioned projects, some are not relevant (to caluclate learning rates) because they are either below that threshold (`r stats[["number"]][["non_relevant_projects1"]]`), above but miss a financing date record (`r stats[["number"]][["non_relevant_projects2"]]`) or are reported in other, minor currencies. `r n_outliers` project(s) had very high prices and distorted the average. We treated them as outliers and removed them form the dataset (see figure 3).
+
+
+Finally, only **`r stats[["number"]][["relevant_projects_with_costs"]]` projects** have a financing costs in one of the relevant currencies. We use these projects , i.e. `r round(stats[["capacity_share"]][["relevant_projects_with_costs"]]*100,1)`% of worldwide capacity to calculate the learning rates. To calculate the BNEF market shares, we use all relevant projects, i.e. `r round(stats[["capacity_share"]][["relevant_projects"]]*100,1)`% of worldwide capacity. These numbers and the corresponding capacity they represent are sumarised in Table 3.
+
+```{r Summary table}
+## Overview table
+summary_table_rows <- 4
+summary_table <- data.frame(
+  "description" = character(summary_table_rows),
+  "projects" = numeric(summary_table_rows),
+  "project share" = numeric(summary_table_rows),
+  "capacity" = numeric(summary_table_rows),
+  "capacity share" = numeric(summary_table_rows),
+  stringsAsFactors = F
+)
+
+summary_table[1,] <- list("all", stats[["number"]][["all_projects"]], NA, stats[["capacity"]][["all_projects"]], NA)
+
+summary_table[2,]  <- list("all commissioned", stats[["number"]][["commissioned_projects"]], 1, stats[["capacity"]][["commissioned_projects"]], 1)
+
+summary_table[3,]  <- list("all relevant", 
+                           stats[["number"]][["relevant_projects"]],
+                           stats[["number_share"]][["relevant_projects"]],
+                           stats[["capacity"]][["relevant_projects"]],
+                           stats[["capacity_share"]][["relevant_projects"]])
+
+summary_table[4,]  <- list("all relevant with costs", 
+                           stats[["number"]][["relevant_projects_with_costs"]],
+                           stats[["number_share"]][["relevant_projects_with_costs"]],
+                           stats[["capacity"]][["relevant_projects_with_costs"]],
+                           stats[["capacity_share"]][["relevant_projects_with_costs"]])
+
+
+kable(summary_table, digits=2, caption = "Summary of dataset. The share relates to the commissioned projects")
+
+```
+
+
+                                              
+```{r Outlier plots, fig.cap="Overview of BNEF data and outliers.", fig.width=fig.width.baseline }
+
+
+with(overview_plots_after, grid.arrange(CNY,EUR,INR,JPY,GBP,USD, ncol=3, widths=c(1, 1, 1)))
+
+
+
+
+```
+                                              
+
+### IRENA dataset
+
+We also calculate the market shares with data from IRENA (source and more info needed).
+
+### Exchangerates and deflators
+
+
+Exchange rates are from OFX and OECD, and the defaltors are based on OECD Consumer Price Index (CPI) data.
+
+```{r Exchangerate plot, fig.cap="Comparison of all different exchange rates", fig.width=fig.width.baseline * 0.8, fig.asp=0.6}
+
+# convert exchange rate df to matrix and apply a vector multiplication
+exchange_rates_matrix <- as.matrix(exchange_rates[, -1])
+exchange_rates_norm_vector <- as.numeric(exchange_rates[241, -1])
+exchange_rates_matrix_norm <- sweep(exchange_rates_matrix, 2, exchange_rates_norm_vector, `/`)
+
+
+exchange_rates_index <- cbind(exchange_rates$date, as.data.frame(exchange_rates_matrix_norm))
+names(exchange_rates_index)[1] <- "date"
+exchange_rates_index$date <- as.Date(exchange_rates_index$date)
+
+# Only above certain date
+exchange_rates_index <- filter(
+  exchange_rates_index,
+  date >= as.Date("2006-01-01")
+)
+
+exchange_rates_index <- melt(exchange_rates_index, id.vars = "date", variable.name = "currency")
+
+exchange_rates_index$currency <- as.factor(exchange_rates_index$currency)
+exchange_rates_index$currency <- factor(exchange_rates_index$currency, plot_order_currency)
+
+ggplot(exchange_rates_index, aes(x = date, y = value, col = currency, linetype = currency)) + 
+  geom_line() +
+  scale_x_date(date_breaks = "1 year", date_labels = "%Y") +
+  scale_linetype_manual(values=plot_order_linetype) +
+  scale_color_npg() +
+  labs(x = "", 
+       y = paste("Index of", lead_currency ," exchange rate"),
+      subtitle = "The data is an index of an exchange rate in 2010") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1,vjust = 0.5 ))
+
+
+ 
+
+
+```
+
+```{r Deflator plot, fig.cap="Deflation", fig.width=fig.width.baseline * 0.8, fig.asp=0.6}
+defl_plot <- subset(defl, year>=T0, year<=T_max)
+defl_plot$year <- ymd(paste(defl_plot$year,"-01-01"))
+
+ggplot(defl_plot, aes(year, defl, col = currency, linetype = currency)) + 
+  geom_line() + 
+  scale_linetype_manual(values=plot_order_linetype) +
+  scale_color_npg() +
+  labs(
+    x = "Year",
+    y = "Deflation relative to 2017",
+    subtitle = "Deflators are based on CPIs")
+
+```
+
+
+
+
+## Handling of missing currency data in the datasets
+
+The marketshare (i.e. deltas) are based on the currency information of different projects (e.g. USD, EUR). However, some BNEF and all IRENA projects lacked this information. Instead they were reported on a country-specific basis. To derive the necessary currency information, we applied some data transformations. 
+
+Based on the assumption that all projects reported in country X are financed in the main currency x of X, we complemented the corresponding projects X with currency x. Our assumption is justified by an inital data exploration that shows that this correlation holds true for most projects that had the currency information in the first place.
+
+## Linear Regression and learning rate calculation
+
+To derive the learning curves, we applied a single-factor learning curve as defined in [@Lindman:2012kv]:
+
+$ln(C_t) = \beta_0 + \beta_1 \cdot ln(CC_t).$
+
+with, $C_t$ as the cost at time $t$, $CC_t$ as cummulative capacity at time $t$, and $\beta_0$ and $\beta_1$ as linear regression estimates. The learning rates is then derived from $\beta_1$:
+
+$LR = 1 - 2^{\beta_1}.$
+
+Based on these formulas, we applied a linear regression model with OLS (Ordinary Least Squares) over the transformed data (with ln-ln transformation of the predictors, as visible in the first formula). 
+
+# Literature
