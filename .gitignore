@@ -62,3 +62,7 @@ Backup of *.doc*
 # 
 
 sources/copyright/
+
+*.nb.html
+
+
