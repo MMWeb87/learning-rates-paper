@@ -10,7 +10,7 @@ output:
   html_notebook: default
 params:
   capacity_threshold: 5
-  delta: "IRENA" # BNEF or IRENA
+  delta: "BNEF" # BNEF or IRENA
   lead_currency: "USD"
   debug: FALSE
 bibliography: bib_lc.bib
@@ -46,7 +46,7 @@ library(knitr)
 library(ggsci)
 #library(ggplot2)
 library(plyr)
-#library(dplyr)
+library(dplyr)
 library(lubridate) # year function
 library(reshape2) # melt function
 library(gridExtra)
@@ -184,6 +184,8 @@ data_with_costs_pre <- select(data_with_costs_pre, date, capacity, local_value, 
 # Final selection of data for the market shares (ie. no local value)
 bnef_data <- select(relevant_projects, date, capacity, local_currency, year)
 
+
+
 ```
 
 
@@ -229,6 +231,9 @@ for (var in unique(data_with_costs$local_currency)) {
 
 
 rm(data_with_outliers)
+
+# Final selection of data for the market shares (ie. no local value)
+bnef_data_short <- select(data_with_costs, date, capacity, local_currency, year)
 
 ```
 
@@ -427,6 +432,8 @@ exchange_rates <- all_exchange_rates[[lead_currency]]
 
 # x_global = sum of xj = total capacity per year.
 x_global_BNEF <- aggregate(bnef_data$capacity, list(year = bnef_data$year), sum)
+x_global_BNEF_short <- aggregate(bnef_data_short$capacity, list(year = bnef_data_short$year), sum)
+
 x_global_IRENA <- aggregate(irena_data$capacity, list(year = irena_data$year), sum)
 
 ## X: global cumulative deployment in year t -> cummulative sum of x_global (sum of xj) per year
@@ -443,7 +450,17 @@ X <- data.frame(
 ## Simple learning rates in different currencies 
 In Table 1 & 2 and Figure 1, we present the results of the simple learning rate approach.
 
+We calculate the simple learning rate in multiple steps. 
+
+### Step 1: Calculation of costs in every relevant currency
+
+1. we add columns for every relevant currency to the data.frame. 
+2. For each project, we calculate the value of the lead currency (default USD) from the local value and an exchange rate that is close to the project date. 
+3. We caluculate the values in each relevant currency from the (in step 2 calculates) lead currency value.
+
 ```{r Calculate simple learning rates}
+
+head(data_with_costs)
 
 # add columns for each currency
 data_with_costs[relevant_currencies] <- NA
@@ -465,16 +482,52 @@ for(j in 1:nrow(data_with_costs)){
   }
 }
 
+head(data_with_costs)
+
+
+```
+
+
+### Step 2. Aggregate data to means
+
+We no aggregate the data by yearly averages.
+
+```{r}
 
 # C_global are the aggregated means of all(!) projects (no subset)
+
+global_means_2 <- data_with_costs %>% 
+  select(year, !!relevant_currencies) %>% 
+  gather("currency", "value", !!relevant_currencies) %>% 
+  group_by(currency, year) %>% 
+  dplyr::summarise(global_means = mean(value, na.rm = TRUE))
+ 
+global_means_2
+
 global_means_pre <- aggregate(data_with_costs[relevant_currencies], list(year = data_with_costs$year), mean)
 global_means <- melt(global_means_pre, id.vars = "year", variable.name = "currency", value.name = "global_means")
 global_means$year <- as.character(global_means$year)
 global_means$currency <- as.character(global_means$currency)
 
+
+```
+
+
+### Step 3. Convert to real values (in 2017 units)
+
+
+```{r}
 # Transform to 2017 units
+
+global_means_2_real <- global_means_2 %>% 
+  inner_join(defl, by = c("currency","year")) %>% 
+  mutate(global_means_2017 = global_means / defl)
+  
 C_global_2017 <- merge(global_means, defl, all.x = T, all.y = F)
 C_global_2017 <- transform(C_global_2017, global_means_2017 = global_means / defl)
+
+
+
 C_global_2017$currency <- as.factor(C_global_2017$currency)
 
 simple_learning_rates_matrix <- matrix(ncol = n_intervals, nrow = n_relevant_currencies)
@@ -524,8 +577,6 @@ kable(simple_learning_rates_rsquared, digits=2, caption = "R-squared values of s
 selected_simple_learning_rates <- simple_learning_rates[,c("2006-2011","2012-2016","2006-2016")]
 
 #taking the largest sum -> largest difference between the different currencies
-
-
 ```
 
 
@@ -596,6 +647,8 @@ calculate_delta <- function(data, x_global){
 
 ## Calculate the deltas and use the corresponding global deplyment figures
 delta_BNEF <- calculate_delta(bnef_data, x_global_BNEF)
+delta_BNEF_short <- calculate_delta(bnef_data_short, x_global_BNEF_short)
+
 delta_IRENA <- calculate_delta(irena_data, x_global_IRENA)
 
 
@@ -603,7 +656,7 @@ delta_IRENA <- calculate_delta(irena_data, x_global_IRENA)
 if(params$delta == "IRENA"){
   delta <- delta_IRENA
 } else {
-  delta <- delta_BNEF
+  delta <- delta_BNEF_short
 }
 
 #convert to factor and change order (for better reading)
@@ -616,11 +669,12 @@ all_years <- as.numeric(T0):as.numeric(T_max)
 delta_print <- delta[order(delta$year) & delta$year %in% all_years,] 
 delta_print <- merge(currency_to_currency_area_translation,delta_print)
 
-delta_print_all <- aggregate(delta_print$`deployment in currency (x)`, by = list(currency = delta_print$`original currency`), sum)
+# Todo: FIX
+#delta_print_all <- aggregate(delta_print$`deployment in currency (x)`, by = list(currency = delta_print$`original currency`), sum)
 
-delta_print_all_sum <- sum(delta_print_all$x)
+#delta_print_all_sum <- sum(delta_print_all$x)
 
-delta_print_all <- mutate(delta_print_all, share = x/delta_print_all_sum)
+#delta_print_all <- mutate(delta_print_all, share = x/delta_print_all_sum)
 
 delta_graph <- delta_print
 delta_graph$currency_area <- as.factor(delta_graph$currency_area)
@@ -725,6 +779,7 @@ for(t in all_years){
     }
     
     if(!ignore_currency){
+      
       
       # weighted average global cost converted to lead currency l in year t
       P[P$year == t, "P"] <- P[P$year == t, "P"] + delta_i_t * w_i_t * C_i_t
@@ -897,6 +952,51 @@ ggplot(combined_plot_data_normed, aes(cumulative_capacity/1000, normed_average_c
 
 # Appendix
 
+## Comparison of simple learning rates and unadjusted learning_rates
+```{r}
+
+# before weighted with the market share
+C_tbl <- as_tibble(C)
+w_tbl <- as_tibble(w)
+
+w_tbl$year <- as.double(w_tbl$year)
+C_tbl$year <- as.double(C_tbl$year)
+
+P_components <- C_tbl %>% 
+  full_join(w_tbl, by = c("currency", "year")) %>% 
+  filter(between(year, 2006,2016)) %>% 
+  dplyr::mutate(weighted_c = C * w)
+View(P_components)
+
+
+global_means_2 %>% right_join(P_components, by= c("currency", "year"))
+
+
+global_means_2 %>% full_join(C_tbl, by= c("currency", "year"))
+
+
+
+global_means_2 %>% 
+  filter(currency == "USD") %>% 
+  inner_join(P, by = c("year")) %>% 
+  dplyr::rename(simple = global_means, unadj = P) %>% 
+  mutate(diff = simple/unadj)
+
+# Idea: the error is because I calculate the marketshare differently.
+
+ # P including market share
+
+global_means_2_real %>% 
+  filter(currency == "USD") %>% 
+  inner_join(P_real, by = c("year")) %>% 
+  dplyr::rename(simple = global_means, unadj = P) %>% 
+  mutate(diff = simple/unadj)
+
+C
+
+P_real
+
+```
 
 ## Marketshares (`r params$delta`)
 
