@@ -44,12 +44,13 @@ combined_plot_interval <- "2006-2016"
 
 library(knitr)
 library(ggsci)
-library(ggplot2)
+#library(ggplot2)
 library(plyr)
-library(dplyr)
+#library(dplyr)
 library(lubridate) # year function
 library(reshape2) # melt function
 library(gridExtra)
+library(tidyverse)
 
 
 #knitr::opts_chunk$set(fig.pos = 'h')
