@@ -104,7 +104,7 @@ data_all <- read.csv("input/data_PV_all_nominal.csv",
 
 data_projects <- select(
   data_all,
-  id = X...Renewable.Project.ID,
+  id = Renewable.Project.ID,
   capacity = Capacity...total..MWe.,
   total_local_value = Total.Value..Local.,
   local_currency_long = Local.Currency,
@@ -145,7 +145,7 @@ currency_translation <- read.csv("input/currency_translation.csv", stringsAsFact
 country_short_to_currency <- data.frame(currency = country_to_currency_translation$currency)
 rownames(country_short_to_currency) <- country_to_currency_translation$country_short
 
-currency_to_currency_area_translation <- select(currency_to_currency_area_translation, currency = "X...currency", currency_area)
+currency_to_currency_area_translation <- select(currency_to_currency_area_translation, currency = "currency", currency_area)
 
 relevant_projects <- merge(
   relevant_projects, 
@@ -279,7 +279,7 @@ irena_data <- filter(
 irena_data <- select(
   irena_data, 
   capacity_cum = Capacity..MW.,
-  country = X...ISO, 
+  country = ISO, 
   year = Year)
 
 # new local currency column
@@ -354,7 +354,7 @@ convert_location_to_currency <- function(location){
 ## Deflators
 # load yearly deflators
 cpi_deflators <- read.csv("input/OECD_CPI_yearly.csv", stringsAsFactors = F)
-cpi_deflators <- select(cpi_deflators, country = X...LOCATION, year = TIME, value = Value)
+cpi_deflators <- select(cpi_deflators, country = LOCATION, year = TIME, value = Value)
 cpi_deflators$year <- as.numeric(cpi_deflators$year)
 
 # change the values to the reference year (2017)
@@ -378,7 +378,7 @@ rm(cpi_deflators_index_year, cpi_deflators)
 ## Exchange rates
 exchange_rates_pre <- read.csv("input/exchange_rates_nominal.csv")
 
-exchange_rates_USD <- select(exchange_rates_pre,date = X...Date, 
+exchange_rates_USD <- select(exchange_rates_pre,date = Date, 
                          EUR = EUR.USD, 
                          GBP = GBP.USD, 
                          CHF = CHF.USD, 
@@ -440,7 +440,7 @@ X <- data.frame(
 ```
 
 ## Simple learning rates in different currencies 
-In Table 3 & 4 and Figure 2, we present the results of the simple learning rate approach.
+In Table 1 & 2 and Figure 1, we present the results of the simple learning rate approach.
 
 ```{r Calculate simple learning rates}
 
@@ -479,6 +479,7 @@ C_global_2017$currency <- as.factor(C_global_2017$currency)
 simple_learning_rates_matrix <- matrix(ncol = n_intervals, nrow = n_relevant_currencies)
 simple_learning_rates_rsquared_matrix <- simple_learning_rates_matrix
 
+# calculation 
 for(i in 1:n_intervals){
   interval <- intervals[[i]]
   interval_years <- as.numeric(interval[1]):as.numeric(interval[2])
@@ -613,6 +614,12 @@ all_years <- as.numeric(T0):as.numeric(T_max)
 
 delta_print <- delta[order(delta$year) & delta$year %in% all_years,] 
 delta_print <- merge(currency_to_currency_area_translation,delta_print)
+
+delta_print_all <- aggregate(delta_print$`deployment in currency (x)`, by = list(currency = delta_print$`original currency`), sum)
+
+delta_print_all_sum <- sum(delta_print_all$x)
+
+delta_print_all <- mutate(delta_print_all, share = x/delta_print_all_sum)
 
 delta_graph <- delta_print
 delta_graph$currency_area <- as.factor(delta_graph$currency_area)
@@ -903,6 +910,15 @@ kable(delta_print, digits=2, caption = "Shares of deployment", row.names = F)
 
 
 ```
+
+The following table shows the share of all PV capacity between 2006 and 2016
+
+```{r}
+
+kable(delta_print_all, digits=3, caption = "Shares of deployment", row.names = F)
+
+```
+
 
 ## Calculation
 
