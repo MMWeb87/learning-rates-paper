@@ -14,9 +14,29 @@ params:
   lead_currency: "USD"
   debug: FALSE
 bibliography: bib_lc.bib
+editor_options: 
+  chunk_output_type: console
 ---
 
-```{r Setup, echo=FALSE, include=FALSE}
+```{r setup, include=FALSE}
+
+library(knitr)
+library(ggsci)
+#library(ggplot2)
+#library(plyr)
+#library(dplyr)
+#library(reshape2) # melt function
+library(gridExtra)
+library(tidyverse)
+library(lubridate) # year function
+
+
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+
+```
+
+
+```{r parameters, include=FALSE}
 
 # to accept these relevant currencies, they need to be in the currency_translation table
 relevant_currencies <- c("CNY","EUR","GBP","INR","JPY","USD")
@@ -38,23 +58,15 @@ out.width.default <- "100%"
 
 combined_plot_interval <- "2006-2016"
 
+exchangerate_reference_month <- 1
+
+
 ```
 
 ```{r Init, echo=FALSE, include=FALSE}
 
-library(knitr)
-library(ggsci)
-#library(ggplot2)
-library(plyr)
-library(dplyr)
-library(lubridate) # year function
-library(reshape2) # melt function
-library(gridExtra)
-library(tidyverse)
-
 
 #knitr::opts_chunk$set(fig.pos = 'h')
-knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
 theme_set(theme_bw(base_size = 9.5) + theme(legend.title=element_blank()))
 
 source("functions_learning.R")
@@ -89,31 +101,24 @@ Date: \today
 
 Here, we present an improved approach that uses global market shares (in this document based on data from `r params$delta`) and a correction factor to calculate a global learning rate that is the same over all currencies. We chose `r n_relevant_currencies` relevant currencies (`r currencies_print`) and calculate a learning rate between `r T0` and `r T_max`. We look only at PV projects above `r params$capacity_threshold` MW.
 
-```{r Load BNEF data, echo=FALSE, warning=FALSE,}
+# Method
 
-exchangerate_reference_month <- 1
 
-# Use the nominal values of PV and defalte afterwards. Use the financing date
+```{r Read BNEF dataset}
 
-setClass('myDate')
-setAs("character","myDate", function(from) as.Date(from, format="%Y-%m-%d") )
-
-data_all <- read.csv("input/data_PV_all_nominal.csv", 
-                     colClasses = c("Financing.Date"="myDate"), 
-                     na.strings=c("","NA"),
-                     stringsAsFactors = F)
-
-data_projects <- select(
-  data_all,
-  id = Renewable.Project.ID,
-  capacity = Capacity...total..MWe.,
-  total_local_value = Total.Value..Local.,
-  local_currency_long = Local.Currency,
-  country = Country,
-  date = Financing.Date,
-  status = Status)
-rm(data_all)
-
+data_projects <- read_csv(
+    file = "input/data_PV_all_nominal.csv", 
+    col_types = cols(
+      `Financing Date` = col_date(format="%Y-%m-%d")),
+    na = c("","NA")) %>%
+  select(
+    id = `Renewable Project ID`,
+    capacity = `Capacity - total (MWe)`,
+    total_local_value = `Total Value (Local)`,
+    local_currency_long = `Local Currency`,
+    country = Country,
+    date = `Financing Date`,
+    status = Status)
 
 commissioned_projects <- filter(
     data_projects, 
@@ -136,55 +141,60 @@ non_relevant_projects2 <- filter(
 ```
 
 
-```{r Complete currencies in BNEF, echo=FALSE, warning=FALSE, }
+We subset the data according to different criteria.
 
-# load the currency translation tables and merge them with the data to get the corresponding entries.
-country_to_currency_translation <- read.csv("input/country_to_currency_translation.csv", stringsAsFactors = F)
-currency_to_currency_area_translation <- read.csv("input/currency_to_currency_area_translation.csv", stringsAsFactors = F)
-currency_translation <- read.csv("input/currency_translation.csv", stringsAsFactors = F)
+TODO: where to put the info?
 
-country_short_to_currency <- data.frame(currency = country_to_currency_translation$currency)
-rownames(country_short_to_currency) <- country_to_currency_translation$country_short
 
-currency_to_currency_area_translation <- select(currency_to_currency_area_translation, currency = "currency", currency_area)
 
-relevant_projects <- merge(
-  relevant_projects, 
-  select(currency_translation, local_currency = short, local_currency_long = long), 
-  by = "local_currency_long", 
-  all.x = T)
 
-relevant_projects <- merge(
-  relevant_projects, 
-  select(country_to_currency_translation, country = country_long, local_currency_added = currency), 
-  by = "country", 
-  all.x = T)
 
-# replace the NA data in the local_currency column (from the original local_currency info) with the local_currency_added data (from assuming the total_local_value was the main currency in the repsective country)
-relevant_projects$local_currency[is.na(relevant_projects$local_currency)] <- relevant_projects$local_currency_added[is.na(relevant_projects$local_currency)]
+The BNEF dataset does not consistenly report the original, local currencies. In cases where the local currency is missing, we assumed that projects were financed in the main currency of the corresponding project countries. In addition, I transform from total local value in Millions to local value in currency/W.
 
-# Select final df and add year
-relevant_projects <- select(relevant_projects, date, capacity, total_local_value, local_currency, id)
-relevant_projects$local_currency <- as.factor(relevant_projects$local_currency)
-relevant_projects$year <- year(relevant_projects$date)
+In addition, we consistently use the short ISO currency codes. Hence we convert the long currency codes to short ones.
 
-## data to be used
-# final data only the ones with costs
-data_with_costs_pre <- filter(
-  relevant_projects,
-  !is.na(total_local_value),
-  !is.na(local_currency),
+```{r Fill missing currency records in BNEF}
+
+# I map short to long currency codes because it's easier to read. 
+long_to_short_currencycode_mappingtable <- read_csv("input/currency_translation.csv") %>%
+  select(local_currency_short = short, local_currency_long = long)
+country_to_currencycode_mappingtable <- read_csv("input/country_to_currency_translation.csv")
+
+relevant_projects_completed <- relevant_projects %>% 
+  left_join(
+    long_to_short_currencycode_mappingtable, 
+    by = "local_currency_long") %>% 
+  left_join(
+    select(country_to_currencycode_mappingtable, country = country_long, local_currency_added = currency), 
+    by = "country") %>% 
+  mutate(
+    local_currency_final = ifelse(is.na(local_currency_short), local_currency_added, local_currency_short),
+    local_value = total_local_value / capacity, # from million currency and MW to currency/W
+    year = year(date))
+
+# In these projects, I decided to keep to currency that was originally reported to be more accurate.
+relevant_projects_completed %>% filter(local_currency_short != local_currency_added)
+  
+
+# To simplify thing, I change the naming here for the final subset
+projects_with_costs_with_outliers <- relevant_projects_completed %>% 
+  select(id, date, capacity, local_currency = local_currency_final, local_value) %>% 
+  filter(
+    !is.na(local_value),
+    !is.na(local_currency),
   local_currency != "Other"
-)
+  )
 
-# Transform costs from Million currency to specific currency/W
-data_with_costs_pre <- transform(data_with_costs_pre, local_value = total_local_value / capacity)
-data_with_costs_pre <- select(data_with_costs_pre, date, capacity, local_value, local_currency, year, id)
-
-# Final selection of data for the market shares (ie. no local value)
-bnef_data <- select(relevant_projects, date, capacity, local_currency, year)
+projects_with_costs_with_outliers$local_currency <- as.factor(projects_with_costs_with_outliers$local_currency)
 
 
+  
+# TODO
+currency_to_currency_area_translation <- read_csv("input/currency_to_currency_area_translation.csv")
+
+country_short_to_currency <- data.frame(currency = country_to_currencycode_mappingtable$currency)
+rownames(country_short_to_currency) <- country_to_currencycode_mappingtable$country_short
+currency_to_currency_area_translation <- select(currency_to_currency_area_translation, currency = "currency", currency_area)
 
 ```
 
