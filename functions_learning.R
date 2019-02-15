@@ -56,6 +56,11 @@ multiplot <- function(..., plotlist=NULL, file, cols=1, layout=NULL) {
 #' @examples 
 calculate_learning_rate <- function(costs, cumulative_capacity, digits = 2){
   
+  if(params$debug){
+    print(costs)
+    print(cumulative_capacity)
+  }
+  
   fit.lm.log <- lm(log(costs) ~ log(cumulative_capacity))
   
   # Extract learning rate from coefficient b1
@@ -68,13 +73,14 @@ calculate_learning_rate <- function(costs, cumulative_capacity, digits = 2){
   rsquared <- summary(fit.lm.log)$r.squared
   
   l <- list(
-    learning_rate = round(learning_rate*100,digits),
+    learning_rate = as.double(round(learning_rate*100,digits)),
     rsquared = round(rsquared*100,digits)
   )
   
   return(l)
   
 }
+
 
 
 make_interval_names <- function(intervals_list){
@@ -158,9 +164,9 @@ calculate_delta <- function(projects, x_global){
 
 print_number_table <- function(table, caption, digits = 2){
   if(params$use_kable){
-    kable(delta_print, digits = digits, caption = caption, row.names = F)
+    kable(table, digits = digits, caption = caption, row.names = F)
   } else {
-    print(delta_print)
+    print(table)
   }
 }
 

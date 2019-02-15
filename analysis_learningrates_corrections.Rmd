@@ -1,7 +1,7 @@
 ---
 title: "Learning rates paper"
 editor_options:
-  chunk_output_type: inline
+  chunk_output_type: console
 output:
   html_document:
     df_print: paged
@@ -15,7 +15,7 @@ output:
 params:
   always_use_fixed_er: yes
   capacity_threshold: 5
-  debug: no
+  debug: yes
   delta: BNEF
   exchangerate_reference_month: 1
   lead_currency: USD
@@ -87,7 +87,7 @@ T_max <- max(unlist(intervals))
 
 lead_currency <- params$lead_currency
 
-n_relevant_currencies <- length(relevant_currencies)
+#n_relevant_currencies <- length(relevant_currencies)
 currencies_print <- paste(relevant_currencies, collapse=", ")
 all_subset_intervals <- list(
   i0 = c(paste0(T0,"-01-01"), paste0(T_max,"-01-02"))
@@ -98,16 +98,15 @@ all_subset_intervals <- list(
 names(intervals) <- make_interval_names(intervals)
 
 
-# Calculate learning rate for each currency
-n_intervals <- length(intervals)
-n_relevant_currencies <- length(relevant_currencies)
+#length(intervals) <- length(intervals)
+#n_relevant_currencies <- length(relevant_currencies)
   
 ```
 Date: \today
 
 # Results for PV -- in lead currency `r lead_currency` & with `r params$delta` marketshare 
 
-Here, we present an improved approach that uses global market shares (in this document based on data from `r params$delta`) and a correction factor to calculate a global learning rate that is the same over all currencies. We chose `r n_relevant_currencies` relevant currencies (`r currencies_print`) and calculate a learning rate between `r T0` and `r T_max`. We look only at PV projects above `r params$capacity_threshold` MW.
+Here, we present an improved approach that uses global market shares (in this document based on data from `r params$delta`) and a correction factor to calculate a global learning rate that is the same over all currencies. We chose `r length(relevant_currencies)` relevant currencies (`r currencies_print`) and calculate a learning rate between `r T0` and `r T_max`. We look only at PV projects above `r params$capacity_threshold` MW.
 
 # Data
 
@@ -542,7 +541,7 @@ average_global_costs <- projects_with_costs_in_currencies %>%
   select(year, !!relevant_currencies) %>% 
   gather("currency", "value", !!relevant_currencies) %>% 
   group_by(currency, year) %>% 
-  summarise(global_means = mean(value))
+  summarise(global_means = mean(value)) %>% ungroup()
  
 #global_means$year <- as.character(global_means$year)
 #global_means$currency <- as.character(global_means$currency)
@@ -556,7 +555,7 @@ average_global_costs <- projects_with_costs_in_currencies %>%
 
 average_global_costs_real <- average_global_costs %>% 
   inner_join(defl, by = c("currency", "year")) %>% 
-  mutate(global_means_real = global_means / defl)
+  mutate(average_costs = global_means / defl)
 
 #C_global_2017$currency <- as.factor(C_global_2017$currency)
 
@@ -566,33 +565,37 @@ average_global_costs_real <- average_global_costs %>%
 
 ```{r Calculation of learning rates}
 
-simple_learning_rates_matrix <- matrix(ncol = n_intervals, nrow = n_relevant_currencies)
+simple_learning_rates_matrix <- matrix(
+  ncol = length(intervals), 
+  nrow = length(relevant_currencies))
+
 simple_learning_rates_rsquared_matrix <- simple_learning_rates_matrix
 
-for(i in 1:n_intervals){
-  interval <- intervals[[i]]
-  interval_years <- as.numeric(interval[1]):as.numeric(interval[2])
-  
-  for(j in 1:n_relevant_currencies){
-    this_currency <- relevant_currencies[[j]]
-  
-    regression_costs <- average_global_costs_real %>% 
-      filter(
-        currency == this_currency, 
-        year %in% interval_years) %>% 
-      pull(global_means_real)
+for(j in seq_along(relevant_currencies)){
+  currency <- relevant_currencies[[j]]
 
+  for(i in seq_along(intervals)){
+    interval <- intervals[[i]]
+    interval_name <- names(intervals[i])
+    interval_years <- as.numeric(interval[1]):as.numeric(interval[2])
+    
+    regression_costs <- average_global_costs_real %>% 
+      filter(year %in% !!interval_years, currency == !!currency) %>% 
+      pull(average_costs)
+    
     regression_cumulative_capacity <- X %>% 
       filter(year %in% interval_years) %>% 
       pull(X)
     
-    learning_rate_list <- calculate_learning_rate(regression_costs, regression_cumulative_capacity)
+    l <- calculate_learning_rate(regression_costs, regression_cumulative_capacity)
     
-    simple_learning_rates_matrix[j,i] <- learning_rate_list$learning_rate
-    simple_learning_rates_rsquared_matrix[j,i] <- learning_rate_list$rsquared
-
+    simple_learning_rates_matrix[j,i] <- l$learning_rate
+    simple_learning_rates_rsquared_matrix[j,i] <- l$rsquared
   }
 }
+
+rm(currency)
+  
 ```
 
 
@@ -823,6 +826,7 @@ for(t in all_years){
 
 ```{r Calculation of unadjusted and adjusted learning rate}
 
+
 corrected_learning_rates_list <- list()
 corrected_learning_rates_data_list <- list()
 corrected_learning_rates_rsquared_list <- list()
@@ -834,7 +838,7 @@ for(type in types){
   corrected_learning_rates_data_list[[type]] <- list()
   corrected_learning_rates_rsquared_list[[type]] <- list()
   
-  for(i in 1:n_intervals){
+  for(i in 1:length(intervals)){
     interval <- intervals[[i]]
    
     interval_years <- as.numeric(interval[1]):as.numeric(interval[2])
@@ -849,11 +853,12 @@ for(type in types){
     regression_costs <- relevant_P %>% 
       filter(year %in% interval_years) %>% 
       pull(P)
-
+    
     regression_cumulative_capacity <- X %>% 
       filter(year %in% interval_years) %>% 
       pull(X)
-
+    
+    if(params$debug){ print(paste("Calc LR with Method 2 and type", type, "in interval", interval_name)) }
     l <- calculate_learning_rate(regression_costs, regression_cumulative_capacity)
     
     corrected_learning_rates_list[[type]][[interval_name]] <- l$learning_rate
@@ -879,8 +884,8 @@ A regression over $P_{t,2017}^l$ gives us the **un**adjusted global learning rat
 
 ```{r Results table}
 
-corrected_learning_rates <- matrix(unlist(corrected_learning_rates_list), ncol = n_intervals, byrow = TRUE)
-corrected_learning_rates_rsquared <- matrix(unlist(corrected_learning_rates_rsquared_list), ncol = n_intervals, byrow = TRUE)
+corrected_learning_rates <- matrix(unlist(corrected_learning_rates_list), ncol = length(intervals), byrow = TRUE)
+corrected_learning_rates_rsquared <- matrix(unlist(corrected_learning_rates_rsquared_list), ncol = length(intervals), byrow = TRUE)
 
 colnames(corrected_learning_rates) <- names(intervals)
 rownames(corrected_learning_rates) <- types
@@ -888,8 +893,8 @@ rownames(corrected_learning_rates) <- types
 colnames(corrected_learning_rates_rsquared) <- names(intervals)
 rownames(corrected_learning_rates_rsquared) <- types
 
-kable(corrected_learning_rates, caption = paste("Global learning rates in lead currency", lead_currency))
-kable(corrected_learning_rates_rsquared, caption = "R-squared of global learning rates")
+print_number_table(corrected_learning_rates, paste("Global learning rates in lead currency", lead_currency))
+print_number_table(corrected_learning_rates_rsquared, "R-squared of global learning rates")
 
 
 ```
@@ -1080,7 +1085,20 @@ projects_with_costs_in_currencies %>%
 
 
 
-average_local_costs
+
+filter(average_global_costs_real, year == 2006, currency == "USD")
+filter(P_real, year == 2006)
+
+# Compare real
+
+P
+P_real
+
+
+average_global_costs
+average_global_costs_real
+
+
 
 
 
@@ -1153,7 +1171,7 @@ ggplot(exchange_rates_index, aes(x = date, y = value, col = currency, linetype =
   theme(axis.text.x = element_text(angle = 90, hjust = 1,vjust = 0.5 ))
 
 
- 
+
 
 
 ```

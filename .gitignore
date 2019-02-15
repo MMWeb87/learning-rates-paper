@@ -59,10 +59,9 @@ Backup of *.doc*
 # Visio autosave temporary files
 *.~vsd*
 
-# 
 
 sources/copyright/
 
-*.nb.html
+/*.nb.html
 
 
