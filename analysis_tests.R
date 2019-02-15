@@ -33,44 +33,13 @@ method_1_test <- projects_with_costs_in_currencies %>%
 
 # Method 2
 
-P_test <- tibble(
-  "year" = all_years,
-  "P" = numeric(length(all_years))
-)
-
-#for(t in all_years){
-
-t <- 2006
-
-for(i in relevant_currencies){
-  
-  # variables for currency i = current_currency and year = T_max
-  delta_i_t <- filter(delta, year == t, currency == i) %>% pull(delta)
-  w_i_t <- filter(w, year == t, currency == i) %>% pull(w)
-  w_i_0 <- filter(w, year == T0, currency == i) %>% pull(w)
-  C_i_t <- filter(C, year == t, currency == i) %>% pull(C)
-  
-  
-  # weighted average global cost converted to lead currency l in year t
-  print(paste(P_test[P_test$year == t, "P"], "+", delta_i_t ,"*", w_i_t  ,"*", C_i_t))
-  
-  
-  P_test[P_test$year == t, "P"] <- P_test[P_test$year == t, "P"] + delta_i_t * w_i_t * C_i_t
-  
-  
-  
-  
-}
-#}
 
 method_1_test
-filter(P_test, year == 2006)
 
 filter(C, year == t)#
 
 # In method 2, it only takes the two countries EUR + USD
 
-0.93260756868844 * 1.211782501 * 6.96963183269819 + 0.0673924313115604 * 1 * 7.1
 
 # does it have to do, how I calculate the means?
 
@@ -129,3 +98,75 @@ average_global_costs_real %>%
 
 
 # trace the error
+
+# try to pin down the error
+
+
+
+
+P_test <- tibble(
+  "year" = all_years,
+  "P" = numeric(length(all_years))
+)
+
+
+t <- 2006
+
+for(i in relevant_currencies){
+  
+  # variables for currency i = current_currency and year = T_max
+  delta_i_t <- filter(delta, year == t, currency == i) %>% pull(delta)
+  w_i_t <- filter(w, year == t, currency == i) %>% pull(w)
+  w_i_0 <- filter(w, year == T0, currency == i) %>% pull(w)
+  C_i_t <- filter(C, year == t, currency == i) %>% pull(C)
+  
+  
+  # weighted average global cost converted to lead currency l in year t
+  print(paste(P_test[P_test$year == t, "P"], "+", delta_i_t ,"*", w_i_t  ,"*", C_i_t))
+  
+  
+  P_test[P_test$year == t, "P"] <- P_test[P_test$year == t, "P"] + delta_i_t * w_i_t * C_i_t
+  
+}
+
+
+
+# compared to the calculation to get to global_average (Method 1)
+test_1 <- projects_with_costs_in_currencies %>% 
+  gather("currency", "value", !!relevant_currencies) %>%
+  filter(currency == "USD", year == "2006") 
+test_1
+
+
+filter(P_test, year == 2006)
+
+# Let's have a look at the costs here
+filter(C, year == "2006")
+test_1
+# OK; the one USD value is equal. what about the other?
+# The mean value of the values is 8.45, which is different than 6.97
+filter(C, year == "2006") # costs in local_currency, so need to compare
+
+test_1
+
+# mean of EUR projects in EUR:
+filter(test_1, local_currency == "EUR") %>% summarise(mean(local_value))
+# mean of EUR projects in USD:
+filter(test_1, local_currency == "EUR") %>% summarise(mean(value)) %>% as.double()
+# is this the same as below?
+# namely as:
+1.211782501 * 6.96963183269819
+# yes it is. The only difference is the marketshare calculation.
+# So, should I not devide by per capacity in the former learning rates?
+
+# the calculation to get to P (Method2)
+0.93260756868844 * 1.211782501 * 6.96963183269819 + 0.0673924313115604 * 1 * 7.1
+
+# In method I simply take the mean of all projects in USD
+test_2<- test_1 %>% 
+  summarise(mean(value))
+
+test_2
+
+
+filter(average_global_costs, currency == "USD", year == "2006")

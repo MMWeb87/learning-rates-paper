@@ -541,7 +541,11 @@ average_global_costs <- projects_with_costs_in_currencies %>%
   select(year, !!relevant_currencies) %>% 
   gather("currency", "value", !!relevant_currencies) %>% 
   group_by(currency, year) %>% 
-  summarise(global_means = mean(value)) %>% ungroup()
+  summarise(average_global_costs = mean(value)) %>% ungroup()
+
+
+
+  
 
 ```
 
@@ -552,7 +556,7 @@ average_global_costs <- projects_with_costs_in_currencies %>%
 
 average_global_costs_real <- average_global_costs %>% 
   inner_join(defl, by = c("currency", "year")) %>% 
-  mutate(average_costs = global_means / defl)
+  mutate(average_costs = average_global_costs / defl)
 
 ```
 
@@ -936,7 +940,7 @@ uncorrected_learning_rates <- average_global_costs %>%
   inner_join(X) %>% 
   select(
     year, 
-    average_costs = global_means, 
+    average_costs = average_global_costs, 
     currency, 
     cumulative_capacity = X) %>% 
   add_column(type = "simple")
