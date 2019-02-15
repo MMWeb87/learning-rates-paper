@@ -1,7 +1,7 @@
 ---
 title: "Learning rates paper"
 editor_options:
-  chunk_output_type: console
+  chunk_output_type: inline
 output:
   html_document:
     df_print: paged
@@ -812,8 +812,8 @@ for(t in all_years){
   
   alphas[alphas$year == t, "alpha"] <- P_tilde[P_tilde$year == t, "P"]  / P[P$year == t, "P"]
   
-  # Transform to real values
-  defl_l_t <- subset(defl, year == T_max & currency == lead_currency)$defl
+  # Deflate the average global costs by the respective deflator of a year
+  defl_l_t <- subset(defl, year == t & currency == lead_currency)$defl
   P_real[P_real$year == t, "P"] <- P[P$year == t, "P"] / defl_l_t
   P_tilde_real[P_tilde_real$year == t, "P"] <- P_tilde[P_tilde$year == t, "P"] / defl_l_t
   
@@ -991,123 +991,7 @@ ggplot(combined_plot_data_normed, aes(cumulative_capacity/1000, normed_average_c
 
 \clearpage
 
-# Test
-
-## Comparison of simple learning rates and unadjusted learning_rates
-
-average_global_costs (from the simple method) should be the same as the unadjusted learning rate in USD. Both consider the marketshare, but do not weight.
-
-```{r}
-
-
-P_components <- average_local_costs %>% 
-  full_join(w, by = c("currency", "year")) %>% 
-  filter(between(year, 2006, 2016)) %>% 
-  mutate(weighted_c = C * w)
-
-methods_diff <- average_global_costs %>% 
-  filter(currency == "USD") %>% 
-  inner_join(P, by = c("year")) %>% 
-  rename(simple = global_means, unadj = P) %>% 
-  mutate(diff = (simple/unadj - 1))
-
-# Let's focus on one entry, the first to find out whats wrong
-methods_diff[1,]
-
-
-## Compare methods
-#Both should give the same result, i.e. the costs.
-
-# Method 1
-method_1_test <- projects_with_costs_in_currencies %>% 
-  select(year, !!relevant_currencies) %>% 
-  gather("currency", "value", !!relevant_currencies) %>% 
-  group_by(currency, year) %>% 
-  summarise(global_means = mean(value)) %>% 
-  filter(currency == "USD", year == 2006)
-
-# Method 2
-
-P_test <- tibble(
-  "year" = all_years,
-  "P" = numeric(length(all_years))
-)
-
-#for(t in all_years){
-  
-  t <- 2006
-  
-  for(i in relevant_currencies){
-
-    # variables for currency i = current_currency and year = T_max
-    delta_i_t <- filter(delta, year == t, currency == i) %>% pull(delta)
-    w_i_t <- filter(w, year == t, currency == i) %>% pull(w)
-    w_i_0 <- filter(w, year == T0, currency == i) %>% pull(w)
-    C_i_t <- filter(C, year == t, currency == i) %>% pull(C)
-    
-    
-    # weighted average global cost converted to lead currency l in year t
-    print(paste(P_test[P_test$year == t, "P"], "+", delta_i_t ,"*", w_i_t  ,"*", C_i_t))
-
-        
-    P_test[P_test$year == t, "P"] <- P_test[P_test$year == t, "P"] + delta_i_t * w_i_t * C_i_t
-    
-    
-    
-    
-  }
-#}
-
-method_1_test
-filter(P_test, year == 2006)
-
-filter(C, year == t)#
-
-# In method 2, it only takes the two countries EUR + USD
-
-0.93260756868844 * 1.211782501 * 6.96963183269819 + 0.0673924313115604 * 1 * 7.1
-
-# does it have to do, how I calculate the means?
-
-projects_with_costs_in_currencies %>% 
-  select(year, !!relevant_currencies) %>% 
-  filter(year == 2006)
-
-# idea: maybe exchange rates are not the same!!
-# in one case i calculate costs with the exchange rate that is closes to the project
-# in the other case, I calculate costs with a fixed exchange rate (or not at all!)
-
-  #gather("currency", "value", !!relevant_currencies) %>% 
-  #group_by(currency, year) 
-
-#%>% 
-  #summarise(global_means = mean(value)) %>% 
-  #filter(currency == "USD", year == 2006)
-
-# a further problem could be that there are Other deltas in the delta. But I only use the relevant countries for the simple learning rates-> no, but consider for IRENA
-
-
-
-
-filter(average_global_costs_real, year == 2006, currency == "USD")
-filter(P_real, year == 2006)
-
-# Compare real
-
-P
-P_real
-
-
-average_global_costs
-average_global_costs_real
-
-
-
-
-
-# trace the error
-
-```
+# Appendix
 
 
 ## Calculation
