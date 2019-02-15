@@ -98,3 +98,69 @@ get_legend<-function(myggplot){
 }
 
 
+# Functions to convert the format of CPI and bloomberg
+
+convert_year_to_date <- function(year){
+  
+  # take the middle day
+  deflator_date <- as.Date(paste("02.07.", year),format = "%d.%m.%Y")
+  return(deflator_date)
+  
+}
+
+convert_location_to_currency <- function(location){
+  
+  location_currency_translation <- list(
+    "USA" = "USD",
+    "EA19" = "EUR",
+    "GBR" = "GBP",
+    "JPN" = "JPY",
+    "CHN" = "CNY",
+    "IND" = "INR")
+  
+  currency <- NA
+  
+  if(location %in% names(location_currency_translation)){
+    currency <- location_currency_translation[[location]]
+  }
+  return(currency)
+  
+} 
+
+
+calculate_delta <- function(projects, x_global){
+  
+  # x$x = amount deployed with cost reported in currency i, measured in non-monetary terms (e.g., MW installed) in year t
+  x <- projects %>%
+    group_by(year, local_currency) %>% 
+    summarise(x = sum(capacity)) %>% ungroup() %>% 
+    complete(year, local_currency, fill = list(x = 0))
+  
+  # delta$delta = the share of deployment with cost reported in currency i in year t
+  delta <- x %>%
+    left_join(x_global, by = "year") %>% 
+    mutate(delta = x / x_global) %>% 
+    rename(currency = local_currency)
+  
+  # Check if assumption is met
+  check <- aggregate(delta$delta, list(year = delta$year), sum)
+  
+  for(i_check in length(check)){
+    if(check[i_check, "x"]!=1){
+      print(warning("Sum of deltas is not 1!"))
+    }
+  }
+  
+  return(delta)
+  
+}
+
+
+print_number_table <- function(table, caption, digits = 2){
+  if(params$use_kable){
+    kable(delta_print, digits = digits, caption = caption, row.names = F)
+  } else {
+    print(delta_print)
+  }
+}
+
