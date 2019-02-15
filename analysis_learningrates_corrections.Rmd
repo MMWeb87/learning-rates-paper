@@ -542,9 +542,6 @@ average_global_costs <- projects_with_costs_in_currencies %>%
   gather("currency", "value", !!relevant_currencies) %>% 
   group_by(currency, year) %>% 
   summarise(global_means = mean(value)) %>% ungroup()
- 
-#global_means$year <- as.character(global_means$year)
-#global_means$currency <- as.character(global_means$currency)
 
 ```
 
@@ -556,8 +553,6 @@ average_global_costs <- projects_with_costs_in_currencies %>%
 average_global_costs_real <- average_global_costs %>% 
   inner_join(defl, by = c("currency", "year")) %>% 
   mutate(average_costs = global_means / defl)
-
-#C_global_2017$currency <- as.factor(C_global_2017$currency)
 
 ```
 
