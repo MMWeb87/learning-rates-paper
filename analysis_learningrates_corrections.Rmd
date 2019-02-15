@@ -587,6 +587,8 @@ for(j in seq_along(relevant_currencies)){
       filter(year %in% interval_years) %>% 
       pull(X)
     
+    if(params$debug){ print(paste("Calc LR with simple methods in currency ", currency, "in interval", interval_name)) }
+    
     l <- calculate_learning_rate(regression_costs, regression_cumulative_capacity)
     
     simple_learning_rates_matrix[j,i] <- l$learning_rate
@@ -859,6 +861,7 @@ for(type in types){
       pull(X)
     
     if(params$debug){ print(paste("Calc LR with Method 2 and type", type, "in interval", interval_name)) }
+    
     l <- calculate_learning_rate(regression_costs, regression_cumulative_capacity)
     
     corrected_learning_rates_list[[type]][[interval_name]] <- l$learning_rate
