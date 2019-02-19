@@ -33,9 +33,7 @@ vignettes/*.pdf
 *.knit.md
 .Rproj.user
 
-# Custom output files and copyright protected Bloomberg data
-output/
-input/data_PV_all_nominal.csv
+
 
 # MicrosoftOffice.gitignore
 
@@ -58,6 +56,10 @@ Backup of *.doc*
 
 # Visio autosave temporary files
 *.~vsd*
+
+# Custom output files and copyright protected Bloomberg data
+output/
+input/data_PV_all_nominal.csv
 
 
 sources/copyright/
