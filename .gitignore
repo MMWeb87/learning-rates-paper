@@ -61,9 +61,6 @@ Backup of *.doc*
 output/
 input/data_PV_all_nominal.csv
 
-
 sources/copyright/
 
-/*.nb.html
-
-
+analysis_learningrates_corrections.nb.html
