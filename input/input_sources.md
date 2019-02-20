@@ -4,4 +4,5 @@
 - input/currency_translation.csv: Generated from the original data. (TODO: put this into a file)
 
 
+IRENA. Renewable capacity statistics 2018 (International Renewable Energy Agency (IRENA), Abu Dhabi, 2018).
 

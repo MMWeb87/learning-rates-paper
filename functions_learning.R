@@ -170,3 +170,33 @@ print_number_table <- function(table, caption, digits = 2){
   }
 }
 
+
+# finds the closest date in exchange_rates$date vector and returns
+get_closest_exchange_rates <- function(project_date, currency) {
+  
+  # exchange_rates is global
+  
+  if(params$always_use_fixed_er){
+    
+    er <- exchange_rates_per_year %>% 
+      filter(year == year(project_date)) %>% 
+      pull(currency)
+    
+  } else {
+    
+    day_differences <- abs(exchange_rates$date - project_date)
+    er_date <- which(abs(day_differences) == min(day_differences, na.rm=TRUE))[1] 
+    er <- as.double(exchange_rates[er_date,currency])
+  }
+  return(er)
+}
+
+
+convert_to_real_costs <- function(average_global_costs_df, deflator){
+  
+  average_global_costs_df %>% 
+    inner_join(deflator, by = c("currency", "year")) %>% 
+    mutate(real_costs = nominal_costs / defl) %>% 
+    select(year, currency, real_costs)
+  
+}
