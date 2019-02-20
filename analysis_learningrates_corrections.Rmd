@@ -654,22 +654,15 @@ colnames(simple_learning_rates_rsquared) <- names(intervals)
 
 simple_learning_rates_sd <- sapply(simple_learning_rates, sd)
 
-
 print_number_table(rbind(simple_learning_rates,"sd"=simple_learning_rates_sd), "Simple learning rates in all currencies. The SD describes the variation between the different learning rates." )
 print_number_table(simple_learning_rates_rsquared, "R-squared values of simple learning rates")
 
-
-# TODO: Order
-selected_simple_learning_rates <- simple_learning_rates[,c("2006-2011","2012-2016","2006-2016")]
-
-selected_simple_learning_rates$currency <- as.factor(rownames(selected_simple_learning_rates))
- 
-selected_simple_learning_rates %>% 
-  gather(key = interval, value = lr, contains("-")) %>% 
-  ggplot(aes(fill=currency, y=lr, x=interval)) + 
+simple_learning_rates %>% 
+  rownames_to_column(var = "currency") %>% 
+  gather(key = "interval", value = "lr", contains("-")) %>% 
+  ggplot(aes(fill = currency, y = lr, x = interval)) + 
     geom_bar(position="dodge", stat="identity") +
-    labs(x = "", 
-       y = paste0("Learning rate")) +
+    labs(x = "", y = paste0("Learning rate")) +
     guides(fill=guide_legend(title="Currency")) +   
     scale_fill_npg()
 
