@@ -13,12 +13,12 @@ output:
     number_sections: yes
     toc_depth: 2
 params:
-  always_use_fixed_er: yes
   capacity_threshold: 5
-  debug: no
   delta: BNEF
-  exchangerate_reference_month: 1
   lead_currency: USD
+  always_use_yearly_er: yes
+  exchange_rate_norm_year: 2010
+  debug: no
   use_kable: no
 subtitle: Sourcefile and calculations
 bibliography: bib_lc.bib
@@ -416,15 +416,47 @@ if(lead_currency != "USD"){
 rm(other_currencies)
 
 # Select the lead currencies exchange rate
-exchange_rates <- exchange_rates_in_lead_currency %>% 
-  as_tibble() %>% 
+exchange_rates_in_lead_currency <- exchange_rates_in_lead_currency %>% 
+  gather(one_of(relevant_currencies), key = "currency", value = "rate") %>% 
   mutate(month = month(date), year = year(date)) %>% 
   select(date, year, month, everything())
 
-exchange_rates_per_year <- exchange_rates %>% 
-  filter(month == params$exchangerate_reference_month) %>% 
-  select(-c(date))
+exchange_rates_averages <- exchange_rates_in_lead_currency %>% 
+  group_by(year, currency) %>% 
+  summarise(rate = mean(rate)) %>% ungroup() %>% 
+  add_column(lead_currency = lead_currency)
 
+# In case I want to change how the yearly exchange rate is calculated
+exchange_rates_per_year <- exchange_rates_averages
+exchange_rates_per_month <- exchange_rates_in_lead_currency
+
+```
+
+
+```{r plot, eval=FALSE, fig.asp=0.6, fig.cap="Comparison of all different exchange rates", fig.width=fig.width.baseline * 0.8, include=FALSE}
+
+
+exchange_rates_norm <- exchange_rates_per_year %>% 
+  filter(year == params$exchange_rate_norm_year) %>% 
+  rename(norm_rate = rate) %>% 
+  select(currency, norm_rate)
+
+exchange_rates_index <- exchange_rates_per_month %>% 
+  left_join(exchange_rates_norm, by = c("currency")) %>% 
+  mutate(normed_rate = rate / norm_rate) %>% 
+  filter(between(year, T0, T_max))
+
+exchange_rates_index$currency <- factor(exchange_rates_index$currency, plot_order_currency)
+
+ggplot(exchange_rates_index, aes(x = date, y = normed_rate, col = currency, linetype = currency)) + 
+  geom_line() +
+  scale_x_date(date_breaks = "1 year", date_labels = "%Y") +
+  scale_linetype_manual(values=plot_order_linetype) +
+  scale_color_npg() +
+  labs(x = "", 
+       y = paste("Index of", lead_currency ," exchange rate"),
+      subtitle = paste("The data is an index of the avaerage exchange rate of", params$exchange_rate_norm_year)) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1,vjust = 0.5 ))
 
 ```
 
@@ -456,6 +488,23 @@ defl$currency <- as.factor(defl$currency)
 
 rm(cpi_deflators_index_year, cpi_deflators)
 ```
+
+
+```{r Deflator plot, eval=FALSE, fig.asp=0.6, fig.cap="Deflation", fig.width=fig.width.baseline * 0.8, include=FALSE}
+defl_plot <- subset(defl, year>=T0, year<=T_max)
+defl_plot$year <- ymd(paste(defl_plot$year,"-01-01"))
+
+ggplot(defl_plot, aes(year, defl, col = currency, linetype = currency)) + 
+  geom_line() + 
+  scale_linetype_manual(values=plot_order_linetype) +
+  scale_color_npg() +
+  labs(
+    x = "Year",
+    y = "Deflation relative to 2017",
+    subtitle = "Deflators are based on CPIs")
+
+```
+
 
 ## Cummulative sums
 
@@ -494,7 +543,7 @@ In Table 1 & 2 and Figure 1, we present the results of the method 1 approach.
 In the first step, we calculate the value for each project in each relevant currency (`r currencies_print`).
 
 1. We add new variables for every relevant currency.
-2. For each project, we calculate the value of the lead currency (`r params$lead_currency`) from the local value and an exchange rate that is either close to the project date or fixed for each year (if always_use_fixed_er == yes). To be consistent with method 2, we use a fixed exchange rate per year in our paper.
+2. For each project, we calculate the value of the lead currency (`r params$lead_currency`) from the local value and an exchange rate that is either close to the project date or fixed for each year (if always_use_yearly_er == yes). To be consistent with method 2, we use a fixed exchange rate per year in our paper.
 3. We caluculate the values in each relevant currency from the lead currency value and the exchange rates (see 2).
 
 ```{r Calculate simple learning rates}
@@ -510,13 +559,13 @@ for(j in 1:nrow(projects_with_costs_in_currencies)){
   local_currency_j = as.character(projects_with_costs_in_currencies[[j,"local_currency"]])
 
   projects_with_costs_in_currencies[[j, lead_currency]] <- #
-    projects_with_costs_in_currencies[[j,"local_value"]] * get_closest_exchange_rates(project_date_j, local_currency_j)
+    projects_with_costs_in_currencies[[j,"local_value"]] * get_exchange_rate_for_project(project_date_j, local_currency_j)
   
   
   for(relevant_currency in relevant_currencies){
     if(relevant_currency!=lead_currency){
       projects_with_costs_in_currencies[[j, relevant_currency]] <- #
-        projects_with_costs_in_currencies[[j, lead_currency]] / get_closest_exchange_rates(project_date_j, relevant_currency)
+        projects_with_costs_in_currencies[[j, lead_currency]] / get_exchange_rate_for_project(project_date_j, relevant_currency)
     }
   }
 }
@@ -762,11 +811,6 @@ Because there is exchange rate data for each month, I select a month based on th
 
 C <- average_local_costs
 
-w <- exchange_rates_per_year %>% 
-  gather(one_of(relevant_currencies), key = "currency", value = "w") %>% 
-  select(-month) %>% 
-  add_column(l = lead_currency)
-
 P <- tibble(
   "currency" = lead_currency,
   "year" = all_years,
@@ -787,8 +831,8 @@ for(t in all_years){
   for(i in relevant_currencies){
 
     delta_i_t <- filter(delta, year == t, currency == i) %>% pull(delta)
-    w_i_t <- filter(w, year == t, currency == i) %>% pull(w)
-    w_i_0 <- filter(w, year == T0, currency == i) %>% pull(w)
+    w_i_t <- filter(exchange_rates_per_year, year == t, currency == i) %>% pull(rate)
+    w_i_0 <- filter(exchange_rates_per_year, year == T0, currency == i) %>% pull(rate)
     C_i_t <- filter(C, year == t, currency == i) %>% pull(C)
     
     # weighted average global cost converted to lead currency l in year t
@@ -867,7 +911,7 @@ for(type in types){
 }
 ```
 
-## Method 1: Results
+## Method 2: Results
 
 We get the following learning rates using the corrected learning rates approach:
 
@@ -997,70 +1041,6 @@ ggplot(combined_plot_data_normed, aes(cumulative_capacity/1000, normed_average_c
 \clearpage
 
 # Appendix
-
-
-### Exchangerates and deflators
-
-
-
-Exchange rates are from OFX and OECD, and the defaltors are based on OECD Consumer Price Index (CPI) data.
-
-```{r Exchangerate plot, eval=FALSE, fig.asp=0.6, fig.cap="Comparison of all different exchange rates", fig.width=fig.width.baseline * 0.8, include=FALSE}
-
-# convert exchange rate df to matrix and apply a vector multiplication
-exchange_rates_matrix <- as.matrix(exchange_rates[, -1])
-exchange_rates_norm_vector <- as.numeric(exchange_rates[241, -1])
-exchange_rates_matrix_norm <- sweep(exchange_rates_matrix, 2, exchange_rates_norm_vector, `/`)
-
-
-exchange_rates_index <- cbind(exchange_rates$date, as.data.frame(exchange_rates_matrix_norm))
-names(exchange_rates_index)[1] <- "date"
-exchange_rates_index$date <- as.Date(exchange_rates_index$date)
-
-# Only above certain date
-exchange_rates_index <- filter(
-  exchange_rates_index,
-  date >= as.Date("2006-01-01")
-)
-
-exchange_rates_index <- melt(exchange_rates_index, id.vars = "date", variable.name = "currency")
-
-exchange_rates_index$currency <- as.factor(exchange_rates_index$currency)
-exchange_rates_index$currency <- factor(exchange_rates_index$currency, plot_order_currency)
-
-ggplot(exchange_rates_index, aes(x = date, y = value, col = currency, linetype = currency)) + 
-  geom_line() +
-  scale_x_date(date_breaks = "1 year", date_labels = "%Y") +
-  scale_linetype_manual(values=plot_order_linetype) +
-  scale_color_npg() +
-  labs(x = "", 
-       y = paste("Index of", lead_currency ," exchange rate"),
-      subtitle = "The data is an index of an exchange rate in 2010") +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1,vjust = 0.5 ))
-
-
-
-
-
-```
-
-```{r Deflator plot, eval=FALSE, fig.asp=0.6, fig.cap="Deflation", fig.width=fig.width.baseline * 0.8, include=FALSE}
-defl_plot <- subset(defl, year>=T0, year<=T_max)
-defl_plot$year <- ymd(paste(defl_plot$year,"-01-01"))
-
-ggplot(defl_plot, aes(year, defl, col = currency, linetype = currency)) + 
-  geom_line() + 
-  scale_linetype_manual(values=plot_order_linetype) +
-  scale_color_npg() +
-  labs(
-    x = "Year",
-    y = "Deflation relative to 2017",
-    subtitle = "Deflators are based on CPIs")
-
-```
-
-
-
 
 ## Linear Regression and learning rate calculation
 

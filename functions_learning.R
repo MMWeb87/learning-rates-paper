@@ -1,3 +1,112 @@
+
+
+
+# Calculation functions ---------------------------------------------------
+
+
+#' Calculation of learning rate. Doubling 
+#'
+#' @param costs The technology costs. Usually yearly means 
+#' @param cumulative_capacity  Cumulative capacity. Need to be same length as costs
+#' @param digits Rounding precision
+#'
+#' @return Learning rate
+#' @export
+#'
+#' @examples 
+calculate_learning_rate <- function(costs, cumulative_capacity, digits = 2){
+  
+  if(params$debug){
+    print(costs)
+    print(cumulative_capacity)
+  }
+  
+  fit.lm.log <- lm(log(costs) ~ log(cumulative_capacity))
+  
+  # Extract learning rate from coefficient b1
+  b1 <- coef(fit.lm.log)[2] 
+  
+  # b1 = delta/r; r = assuming constant returns-to-scale parameter = 1. delta_L is the so-called learning-by-doing elasticity, indicating the percentage change in cost following a one percentage increase in cumulative capacity.
+  
+  delta_L <- b1 
+  learning_rate <- 1 - 2 ^ delta_L # Percentage decrease in wind power cost for each doubling of cumulative capacity.
+  rsquared <- summary(fit.lm.log)$r.squared
+  
+  l <- list(
+    learning_rate = as.double(round(learning_rate*100,digits)),
+    rsquared = round(rsquared*100,digits)
+  )
+  
+  return(l)
+  
+}
+
+
+
+
+calculate_delta <- function(projects, x_global){
+  
+  # x$x = amount deployed with cost reported in currency i, measured in non-monetary terms (e.g., MW installed) in year t
+  x <- projects %>%
+    group_by(year, local_currency) %>% 
+    summarise(x = sum(capacity)) %>% ungroup() %>% 
+    complete(year, local_currency, fill = list(x = 0))
+  
+  # delta$delta = the share of deployment with cost reported in currency i in year t
+  delta <- x %>%
+    left_join(x_global, by = "year") %>% 
+    mutate(delta = x / x_global) %>% 
+    rename(currency = local_currency)
+  
+  # Check if assumption is met
+  check <- aggregate(delta$delta, list(year = delta$year), sum)
+  
+  for(i_check in length(check)){
+    if(check[i_check, "x"]!=1){
+      print(warning("Sum of deltas is not 1!"))
+    }
+  }
+  
+  return(delta)
+  
+}
+
+
+convert_to_real_costs <- function(average_global_costs_df, deflator){
+  
+  average_global_costs_df %>% 
+    inner_join(deflator, by = c("currency", "year")) %>% 
+    mutate(real_costs = nominal_costs / defl) %>% 
+    select(year, currency, real_costs)
+  
+}
+
+get_exchange_rate_for_project <- function(project_date, project_currency) {
+  
+  # exchange_rates is global
+
+  if(params$always_use_yearly_er){
+    er <- exchange_rates_per_year %>% 
+      filter(year == year(project_date), currency == project_currency) %>% 
+      pull(rate)
+    
+    
+  } else {
+    # finds the closest date in exchange_rates$date vector and returns
+    ## TODO: fix this function
+    
+    day_differences <- abs(exchange_rates_per_year$date - project_date)
+    er_date <- which(abs(day_differences) == min(day_differences, na.rm=TRUE))[1] 
+    er <- as.double(exchange_rates[er_date,currency])
+  }
+  return(er)
+}
+
+
+
+# Plot functions -----------------------------------------------------------
+
+
 # ggplot objects can be passed in ..., or to plotlist (as a list of ggplot objects)
 # - cols:   Number of columns in layout
 # - layout: A matrix specifying the layout. If present, 'cols' is ignored.
@@ -42,45 +151,25 @@ multiplot <- function(..., plotlist=NULL, file, cols=1, layout=NULL) {
   }
 }
 
-
-
-#' Calculation of learning rate. Doubling 
-#'
-#' @param costs The technology costs. Usually yearly means 
-#' @param cumulative_capacity  Cumulative capacity. Need to be same length as costs
-#' @param digits Rounding precision
-#'
-#' @return Learning rate
-#' @export
-#'
-#' @examples 
-calculate_learning_rate <- function(costs, cumulative_capacity, digits = 2){
-  
-  if(params$debug){
-    print(costs)
-    print(cumulative_capacity)
-  }
-  
-  fit.lm.log <- lm(log(costs) ~ log(cumulative_capacity))
-  
-  # Extract learning rate from coefficient b1
-  b1 <- coef(fit.lm.log)[2] 
-  
-  # b1 = delta/r; r = assuming constant returns-to-scale parameter = 1. delta_L is the so-called learning-by-doing elasticity, indicating the percentage change in cost following a one percentage increase in cumulative capacity.
-  
-  delta_L <- b1 
-  learning_rate <- 1 - 2 ^ delta_L # Percentage decrease in wind power cost for each doubling of cumulative capacity.
-  rsquared <- summary(fit.lm.log)$r.squared
-  
-  l <- list(
-    learning_rate = as.double(round(learning_rate*100,digits)),
-    rsquared = round(rsquared*100,digits)
-  )
-  
-  return(l)
-  
+get_legend<-function(myggplot){
+  tmp <- ggplot_gtable(ggplot_build(myggplot))
+  leg <- which(sapply(tmp$grobs, function(x) x$name) == "guide-box")
+  legend <- tmp$grobs[[leg]]
+  return(legend)
 }
 
+# Print and display functions ---------------------------------------------
+
+print_number_table <- function(table, caption, digits = 2){
+  if(params$use_kable){
+    kable(table, digits = digits, caption = caption, row.names = F)
+  } else {
+    print(table)
+  }
+}
+
+
+# Helper functions --------------------------------------------------------
 
 
 make_interval_names <- function(intervals_list){
@@ -93,14 +182,6 @@ make_interval_names <- function(intervals_list){
   }
   
   return(intervals_names)
-}
-
-
-get_legend<-function(myggplot){
-  tmp <- ggplot_gtable(ggplot_build(myggplot))
-  leg <- which(sapply(tmp$grobs, function(x) x$name) == "guide-box")
-  legend <- tmp$grobs[[leg]]
-  return(legend)
 }
 
 
@@ -134,69 +215,3 @@ convert_location_to_currency <- function(location){
 } 
 
 
-calculate_delta <- function(projects, x_global){
-  
-  # x$x = amount deployed with cost reported in currency i, measured in non-monetary terms (e.g., MW installed) in year t
-  x <- projects %>%
-    group_by(year, local_currency) %>% 
-    summarise(x = sum(capacity)) %>% ungroup() %>% 
-    complete(year, local_currency, fill = list(x = 0))
-  
-  # delta$delta = the share of deployment with cost reported in currency i in year t
-  delta <- x %>%
-    left_join(x_global, by = "year") %>% 
-    mutate(delta = x / x_global) %>% 
-    rename(currency = local_currency)
-  
-  # Check if assumption is met
-  check <- aggregate(delta$delta, list(year = delta$year), sum)
-  
-  for(i_check in length(check)){
-    if(check[i_check, "x"]!=1){
-      print(warning("Sum of deltas is not 1!"))
-    }
-  }
-  
-  return(delta)
-  
-}
-
-
-print_number_table <- function(table, caption, digits = 2){
-  if(params$use_kable){
-    kable(table, digits = digits, caption = caption, row.names = F)
-  } else {
-    print(table)
-  }
-}
-
-
-# finds the closest date in exchange_rates$date vector and returns
-get_closest_exchange_rates <- function(project_date, currency) {
-  
-  # exchange_rates is global
-  
-  if(params$always_use_fixed_er){
-    
-    er <- exchange_rates_per_year %>% 
-      filter(year == year(project_date)) %>% 
-      pull(currency)
-    
-  } else {
-    
-    day_differences <- abs(exchange_rates$date - project_date)
-    er_date <- which(abs(day_differences) == min(day_differences, na.rm=TRUE))[1] 
-    er <- as.double(exchange_rates[er_date,currency])
-  }
-  return(er)
-}
-
-
-convert_to_real_costs <- function(average_global_costs_df, deflator){
-  
-  average_global_costs_df %>% 
-    inner_join(deflator, by = c("currency", "year")) %>% 
-    mutate(real_costs = nominal_costs / defl) %>% 
-    select(year, currency, real_costs)
-  
-}
