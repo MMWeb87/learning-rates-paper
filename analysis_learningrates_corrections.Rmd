@@ -15,7 +15,9 @@ output:
 params:
   capacity_threshold: 5
   delta: BNEF
-  x_global_for_cumsum: IRENA
+  x_global_for_cumsum: BNEF_relevant
+  X_norm: yes
+  X_norm_capacity: 500
   lead_currency: USD
   always_use_yearly_er: yes
   exchange_rate_norm_year: 2010
@@ -532,12 +534,19 @@ x_global %>%
   reduce(bind_rows) %>% 
   group_by(subset_name) %>% 
   mutate(X = cumsum(x_global)) %>% 
+  filter(year <2010) %>% 
   ggplot(mapping = aes(x = year, y = X)) +
     geom_line(mapping = aes(linetype = subset_name, colour = subset_name)) 
            
 X <- x_global[[params$x_global_for_cumsum]] %>%
   mutate(X = cumsum(x_global)) %>% 
   select(year, X)
+
+if(params$X_norm){
+  normyear_value <- filter(X, year == T0) %>% pull(X)
+  X <- X %>% 
+    mutate(X = X - normyear_value + params$X_norm_capacity)
+}
   
 ```
 
