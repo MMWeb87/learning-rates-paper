@@ -15,9 +15,11 @@ output:
 params:
   capacity_threshold: 5
   delta: BNEF
+  x_global_for_cumsum: IRENA
   lead_currency: USD
   always_use_yearly_er: yes
   exchange_rate_norm_year: 2010
+  default_digits: 0
   debug: no
   use_kable: no
 subtitle: Sourcefile and calculations
@@ -38,7 +40,7 @@ theme_set(theme_bw(base_size = 9.5) + theme(legend.title=element_blank()))
 ```
 
 
-```{r parameters, echo=TRUE}
+```{r parameters}
 
 # to accept these relevant currencies, they need to be in the currency_translation table
 relevant_currencies <- c("CNY","EUR","GBP","INR","JPY","USD")
@@ -63,14 +65,10 @@ filenames <- list(
   exchange_rates = "input/USD_exchange_rates.csv"
 )
 
-params
 
 ```
 
-```{r Init, echo=FALSE, include=FALSE}
-
-
-#knitr::opts_chunk$set(fig.pos = 'h')
+```{r Init variables, echo=FALSE, include=FALSE}
 
 source("functions_learning.R")
 
@@ -97,7 +95,7 @@ This file documents the method of the paper:  . In it,  we present an improved a
 
 ## Parameters
 
-We chose `r length(relevant_currencies)` relevant currencies (`r currencies_print`) and calculate a learning rate between `r T0` and `r T_max`. We look only at PV projects above `r params$capacity_threshold` MW. For the exchange rate conversion, we chose the month (`r params$exchangerate_reference_month`) as reference month.
+We chose `r length(relevant_currencies)` relevant currencies (`r currencies_print`) and calculate a learning rate between `r T0` and `r T_max`. We look only at PV projects above `r params$capacity_threshold` MW.
 
 # Data
 
@@ -126,7 +124,9 @@ data_projects <- read_csv(
   mutate(
     local_value = total_local_value / capacity, # from million currency and MW to currency/W
     year = year(date)
-  )
+  ) %>% 
+  add_column(subset_name = "All projects")
+
 
 ```
 
@@ -134,22 +134,23 @@ We subset the data according to different criteria:
  
 ```{r subset BNEF dataset, echo=TRUE}
 
-projects_in_interval <- filter(data_projects,
-  between(year, T0, T_max))
-
-commissioned_projects <- filter(projects_in_interval, 
-    status == "Commissioned")
+commissioned_projects <- filter(data_projects, 
+    status == "Commissioned") %>% 
+  mutate(subset_name = "BNEF commissioned")
 
 relevant_projects <- filter(commissioned_projects,
     capacity >= params$capacity_threshold,
-    !is.na(date))
+    !is.na(date)) %>% 
+  mutate(subset_name = "BNEF relevant")
 
 non_relevant_projects1 <- filter(commissioned_projects,
-    capacity < params$capacity_threshold)
+    capacity < params$capacity_threshold) %>% 
+  mutate(subset_name = "BNEF non-relevant")
 
 non_relevant_projects2 <- filter(commissioned_projects,
     capacity >= params$capacity_threshold,
-    is.na(date))
+    is.na(date)) %>% 
+  mutate(subset_name = "BNEF non-relevant")
 
 ```
 
@@ -195,7 +196,8 @@ projects_with_costs_with_outliers <- relevant_projects_completed %>%
     !is.na(local_value),
     !is.na(local_currency),
   local_currency != "Other"
-  )
+  ) %>% 
+  mutate(subset_name = "BNEF with costs with outliers")
 
 projects_with_costs_with_outliers$local_currency <- as.factor(projects_with_costs_with_outliers$local_currency)
 
@@ -221,7 +223,8 @@ n_outliers <- sum(projects_with_costs_with_outliers$outlier)
 # projects_with_costs
 projects_with_costs <- projects_with_costs_with_outliers %>% 
   filter(outlier == FALSE) %>% 
-  select(-outlier)
+  select(-outlier) %>% 
+  mutate(subset_name = "BNEF with costs")
 
 overview_plots_after <- list()
 overview_plots_after_boxplot <- list()
@@ -245,6 +248,17 @@ with(overview_plots_after, grid.arrange(CNY,EUR,INR,JPY,GBP,USD, ncol=3, widths=
 
 From *projects_with_costs_with_outliers*, we exclude `r n_outliers` projects as outliers because they have implausible costs that deviate very strongly (a factor 10 or more) from the overall trend and have most likely been entered incorrectly in the BNEF database. Compare the outliers.csv for details and see the plots bellow.
 
+### Apply interval
+
+```{r}
+
+projects_with_costs_in_interval <- filter(projects_with_costs,
+  between(year, T0, T_max)) %>% 
+  mutate(subset_name = "BNEF with costs in interval")
+
+```
+
+
 ### Overview
 
 ```{r Statistical number of BNEF}
@@ -254,9 +268,6 @@ stats <- list()
 # Different BNEF statistics
 stats[["number"]][["all_projects"]] <- nrow(data_projects)
 stats[["capacity"]][["all_projects"]] <- sum(data_projects$capacity, na.rm = T)
-
-stats[["number"]][["in_interval_projects"]] <- nrow(projects_in_interval)
-stats[["capacity"]][["in_interval_projects"]] <- sum(projects_in_interval$capacity, na.rm = T)
 
 stats[["number"]][["commissioned_projects"]] <- nrow(commissioned_projects)
 stats[["capacity"]][["commissioned_projects"]] <- sum(commissioned_projects$capacity, na.rm = T)
@@ -276,10 +287,8 @@ stats[["capacity"]][["relevant_projects_with_costs_with_outliers"]] <- sum(proje
 stats[["number"]][["relevant_projects_with_costs"]] <- nrow(projects_with_costs)
 stats[["capacity"]][["relevant_projects_with_costs"]] <- sum(projects_with_costs$capacity)
 
-if(params$debug){
-  # I delete allbut the projects_with_costs to make sure that I use only projects_with_costs
-  rm(data_projects, projects_in_interval, commissioned_projects, relevant_projects, non_relevant_projects1, non_relevant_projects2, projects_with_costs_with_outliers, relevant_projects_completed)
-}
+stats[["number"]][["relevant_projects_with_costs_in_interval"]] <- nrow(projects_with_costs_in_interval)
+stats[["capacity"]][["relevant_projects_with_costs_in_interval"]] <- sum(projects_with_costs_in_interval$capacity)
 
 
 # Shares
@@ -300,33 +309,37 @@ summary_table <- data.frame(
 
 summary_table[1,] <- list("all", stats[["number"]][["all_projects"]], NA, stats[["capacity"]][["all_projects"]], NA)
 
-summary_table[2,] <- list(paste("all between", T0, "and",T_max), 
-                          stats[["number"]][["in_interval_projects"]], 
-                          NA, 
-                          stats[["capacity"]][["in_interval_projects"]], 
-                          NA)
 
-summary_table[3,]  <- list("all commissioned", stats[["number"]][["commissioned_projects"]], 1, stats[["capacity"]][["commissioned_projects"]], 1)
+summary_table[2,]  <- list("all commissioned", stats[["number"]][["commissioned_projects"]], 1, stats[["capacity"]][["commissioned_projects"]], 1)
 
-summary_table[4,]  <- list("all relevant", 
+summary_table[3,]  <- list("all relevant", 
                            stats[["number"]][["relevant_projects"]],
                            stats[["number_share"]][["relevant_projects"]],
                            stats[["capacity"]][["relevant_projects"]],
                            stats[["capacity_share"]][["relevant_projects"]])
 
-summary_table[5,]  <- list("all relevant with costs and outliers", 
+summary_table[4,]  <- list("all relevant with costs and outliers", 
                            stats[["number"]][["relevant_projects_with_costs_with_outliers"]],
                            stats[["number_share"]][["relevant_projects_with_costs_with_outliers"]],
                            stats[["capacity"]][["relevant_projects_with_costs_with_outliers"]],
                            stats[["capacity_share"]][["relevant_projects_with_costs_with_outliers"]])
 
-summary_table[6,]  <- list("all relevant with costs", 
+summary_table[5,]  <- list("all relevant with costs", 
                            stats[["number"]][["relevant_projects_with_costs"]],
                            stats[["number_share"]][["relevant_projects_with_costs"]],
                            stats[["capacity"]][["relevant_projects_with_costs"]],
                            stats[["capacity_share"]][["relevant_projects_with_costs"]])
 
-print_number_table(table = summary_table, caption = "Summary of dataset. The share relates to the commissioned")
+summary_table[6,]  <- list("all relevant with costs in interval", 
+                           stats[["number"]][["relevant_projects_with_costs_in_interval"]],
+                           stats[["number_share"]][["relevant_projects_with_costs_in_interval"]],
+                           stats[["capacity"]][["relevant_projects_with_costs_in_interval"]],
+                           stats[["capacity_share"]][["relevant_projects_with_costs_in_interval"]])
+
+
+print_number_table(table = summary_table, caption = "Summary of dataset. The share relates to the commissioned", digits = 2)
+
+
 
 ```
 
@@ -354,13 +367,10 @@ irena_data <- read_csv("input/irena-capacity-generation.csv") %>%
     year = Year) %>%
   arrange(country, year) %>% # need to sort, as I calculate the difference between each year in a loop
   mutate(capacity = capacity_cum) %>% # the simplest way to set the start capacity in each year 
-  add_column(local_currency = NA)
+  add_column(local_currency = NA) %>% 
+  add_column(subset_name = "IRENA all")
 
 irena_data$local_currency <- as.character(irena_data$local_currency)
-
-# change datatypes. Necessary?
-# irena_data$year <- as.numeric(irena_data$year)
-# irena_data$capacity_cum <- as.numeric(irena_data$capacity_cum)
 
 
 # We loop through the dataset, because we can both set the irena_data$local_currency and calculate yearly capacity additions instead of the cummulative capacity we have so far.
@@ -391,7 +401,7 @@ rm(i,ith_irena_country)
 
 ## Exchange rates
 
-Exchange rates are from OFX and OECD, and the defaltors are based on OECD Consumer Price Index (CPI) data.
+Exchange rates are from OFX and OECD, and the defaltors are based on OECD Consumer Price Index (CPI) data. We take the yearly average as basis for our calculations
 
 ```{r load exchange rates}
 
@@ -400,7 +410,6 @@ exchange_rates_USD <- read_csv(filenames[["exchange_rates"]], col_types = cols(
   drop_na() %>% 
   add_column(USD = 1) %>% 
   select(date, !!relevant_currencies)
-
 
 exchange_rates_in_lead_currency <- exchange_rates_USD  
 
@@ -433,8 +442,7 @@ exchange_rates_per_month <- exchange_rates_in_lead_currency
 ```
 
 
-```{r plot, eval=FALSE, fig.asp=0.6, fig.cap="Comparison of all different exchange rates", fig.width=fig.width.baseline * 0.8, include=FALSE}
-
+```{r exchange rate plot, echo=FALSE, fig.asp=0.6, fig.cap="Comparison of all different exchange rates", fig.width=fig.width.baseline * 0.8}
 
 exchange_rates_norm <- exchange_rates_per_year %>% 
   filter(year == params$exchange_rate_norm_year) %>% 
@@ -448,7 +456,7 @@ exchange_rates_index <- exchange_rates_per_month %>%
 
 exchange_rates_index$currency <- factor(exchange_rates_index$currency, plot_order_currency)
 
-ggplot(exchange_rates_index, aes(x = date, y = normed_rate, col = currency, linetype = currency)) + 
+ggplot(exchange_rates_index, aes(x = date, y = normed_rate, col = currency, linetype = currency)) +
   geom_line() +
   scale_x_date(date_breaks = "1 year", date_labels = "%Y") +
   scale_linetype_manual(values=plot_order_linetype) +
@@ -490,7 +498,7 @@ rm(cpi_deflators_index_year, cpi_deflators)
 ```
 
 
-```{r Deflator plot, eval=FALSE, fig.asp=0.6, fig.cap="Deflation", fig.width=fig.width.baseline * 0.8, include=FALSE}
+```{r Deflator plot, echo=FALSE, fig.asp=0.6, fig.cap="Deflation", fig.width=fig.width.baseline * 0.8}
 defl_plot <- subset(defl, year>=T0, year<=T_max)
 defl_plot$year <- ymd(paste(defl_plot$year,"-01-01"))
 
@@ -509,25 +517,35 @@ ggplot(defl_plot, aes(year, defl, col = currency, linetype = currency)) +
 ## Cummulative sums
 
 X is the global cumulative deployment in year t -> cummulative sum of x_global (sum of xj) per year
-I always use the cummulative capacity from BNEF because it relates to the average costs and projects.
-
 
 ```{r Calculate cummulative sums}
 
-x_global_BNEF <- projects_with_costs %>% 
-  group_by(year) %>% 
-  summarise(x_global = sum(capacity))
+x_global <- list(
+    "BNEF_commissioned" = commissioned_projects,
+    "BNEF_relevant" = relevant_projects,
+    "BNEF_interval" = projects_with_costs_in_interval,
+    "IRENA" = irena_data) %>% 
+  map(calculate_cummulative_sums)
 
-x_global_IRENA <- irena_data %>% 
-  group_by(year) %>% 
-  summarise(x_global = sum(capacity))
-
-X <- tibble(
-  year = x_global_BNEF$year,
-  X = cumsum(x_global_BNEF$x_global)
-)
-
+# to decide which cumsums to take
+x_global %>% 
+  reduce(bind_rows) %>% 
+  group_by(subset_name) %>% 
+  mutate(X = cumsum(x_global)) %>% 
+  ggplot(mapping = aes(x = year, y = X)) +
+    geom_line(mapping = aes(linetype = subset_name, colour = subset_name)) 
+           
+X <- x_global[[params$x_global_for_cumsum]] %>%
+  mutate(X = cumsum(x_global)) %>% 
+  select(year, X)
+  
 ```
+
+To get a good estimate of the learning rate, the underyling cummulative capacity should reflect the actual global deplyoment. If we took a subset, the learning rate would be overestimated. The plot indicates that there is a large difference in the global cummulative deplyoment in the subsets. So:
+
+- if only working with the BNEF dataset, we take BNEF relevant, as they only consider 5MW projects. They fulfill our assumption that large projects are global. 
+
+- to improve results, we should take the IRENA data.
 
 # Learning rate calculations
 
@@ -548,7 +566,7 @@ In the first step, we calculate the value for each project in each relevant curr
 
 ```{r Calculate simple learning rates}
 
-projects_with_costs_in_currencies <- projects_with_costs
+projects_with_costs_in_currencies <- projects_with_costs_in_interval
 
 # add columns for each currency
 projects_with_costs_in_currencies[relevant_currencies] <- NA
@@ -676,23 +694,15 @@ simple_learning_rates %>%
 
 We calculate our improved currency-corrected learning rate in the lead currency **`r lead_currency`** The resulting, single learning rate is based on the *weighted average global cost converted to lead currency* $P_{t,2017}^l$. 
 
-We derive $P_{t,2017}^l$ by:
-
-1. calculating $C_{t}^{i}$, i.e. the yearly means of all costs reported in currency i (a subset of all costs).
-2. weighting the (nominal) average costs $C_{t}^{i}$ in each year $t$ by the market share in year $t$.
-3. converting the weighted average costs to the lead currency.
-4. taking the sum of all weighted costs in the lead.
-5. applying a deflator to get the (real) 2017 costs.
-
-
 ### Step 1: Marketshare calculation
 
 A notable difference to the uncorrected learning rate method, is that we weighting the average global costs by the marketshares $\delta$. For those, we have two datasource. (1) BNEF which is also used to calculate the learning rates and (2) IRENA. The IRENA data represents more capacity and is a better measure of the global market shares.
 
 ```{r Calculation of market shares}
 
-delta_BNEF <- calculate_delta(projects_with_costs, x_global_BNEF)
-delta_IRENA <- calculate_delta(irena_data, x_global_IRENA)
+# here, x_global needs to be from the same subset, otherwise the marketshare do not sum up to 1
+delta_BNEF <- calculate_delta(projects_with_costs_in_interval, x_global$BNEF_interval)
+delta_IRENA <- calculate_delta(irena_data, x_global$IRENA)
 
 if(params$delta == "IRENA"){
   delta <- delta_IRENA
@@ -735,7 +745,7 @@ delta_plot2 <- ggplot(data=delta_graph, aes(x=year, y=delta, fill=currency_area)
 
 delta_plot_legend <- get_legend(delta_plot1)
 delta_plot1 <- delta_plot1 + theme(legend.position="none")
-delta_plot1
+
 ```
 
 
@@ -748,12 +758,7 @@ The market share of PV deplyoment in each currency and year is relevant. To calc
 
 grid.arrange(delta_plot1,delta_plot2, delta_plot_legend, ncol=3, widths=c(2.2, 2.2, 0.9))
 
-print_number_table(delta_print, "Shares of deployment")
-
-
-
-
-
+#print_number_table(delta_print, "Shares of deployment")
 
 ```
 
@@ -766,8 +771,6 @@ The following table shows the share of all PV capacity between 2006 and 2016
 ```
 
 
-
-
 ### Step 2: Calculation of the formula variable
 
 C are observed average cost in currency i. We use the variable average_local_costs
@@ -776,7 +779,7 @@ C are observed average cost in currency i. We use the variable average_local_cos
 
 ## C = average_local_costs: observed average cost per MW in currency i in year t (i.e. not a subset of all projects) 
 
-average_local_costs <- projects_with_costs %>% 
+average_local_costs <- projects_with_costs_in_interval %>% 
   group_by(year, local_currency) %>% 
   summarise(C = mean(local_value)) %>% ungroup() %>%
   rename(currency = local_currency) %>% 
@@ -792,8 +795,6 @@ In the third step, we aggregate the data by yearly averages for each currency. T
 
 - $P$ for the unadjusted average global costs
 - $P_{tilde}$ for the adjusted average global costs
-
-Because there is exchange rate data for each month, I select a month based on the exchangerate_reference_month parameter 
 
 ```{r Calculation of the weighted average global cost P}
 
@@ -927,7 +928,6 @@ print_number_table(corrected_learning_rates_rsquared, "R-squared of global learn
 
 
 ```{r Plot of learning curves, fig.cap="Plot of the currency-corrected learning curve in 3 intervals", fig.width=fig.width.baseline * 0.8, fig.asp=0.6}
-
 
 data_for_plots <- do.call("rbind", corrected_learning_rates_data_list$adjusted)
 

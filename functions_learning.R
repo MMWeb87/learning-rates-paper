@@ -34,7 +34,8 @@ calculate_learning_rate <- function(costs, cumulative_capacity, digits = 2){
   
   l <- list(
     learning_rate = as.double(round(learning_rate*100,digits)),
-    rsquared = round(rsquared*100,digits)
+    rsquared = round(rsquared*100,digits),
+    summary = summary(fit.lm.log)
   )
   
   return(l)
@@ -43,6 +44,21 @@ calculate_learning_rate <- function(costs, cumulative_capacity, digits = 2){
 
 
 
+
+#' calculate_cummulative_sums
+#' Calculates the deployment of capacity per year
+#' @param projects_data A dataframe including the variable year and capacity
+#'
+#' @return
+#' @export
+#'
+#' @examples
+calculate_cummulative_sums <- function(projects_data){
+  projects_data %>% 
+    group_by(year, subset_name) %>% 
+    summarise(x_global = sum(capacity, na.rm = TRUE)) %>% 
+    ungroup()
+}
 
 calculate_delta <- function(projects, x_global){
   
@@ -160,9 +176,9 @@ get_legend<-function(myggplot){
 
 # Print and display functions ---------------------------------------------
 
-print_number_table <- function(table, caption, digits = 2){
+print_number_table <- function(table, caption, digits = params$default_digits, ...){
   if(params$use_kable){
-    kable(table, digits = digits, caption = caption, row.names = F)
+    kable(table, caption = caption, digits = digits, ...)
   } else {
     print(table)
   }

@@ -8,7 +8,7 @@ rmarkdown::render("analysis_learningrates_corrections.Rmd", output_format = "pdf
                   output_file = paste0(filename, "_BNEF_", report_currency, ".pdf"), output_dir = "output", 
                   params = list(
                     delta = "BNEF",
-                    use_kable: "yes",
+                    use_kable = TRUE,
                     lead_currency = report_currency))
 
 
@@ -16,6 +16,8 @@ rmarkdown::render("analysis_learningrates_corrections.Rmd", output_format = "pdf
 rmarkdown::render("analysis_learningrates_corrections.Rmd", output_format = "pdf_document", 
                   output_file = paste0(filename, "_IRENA_", report_currency, ".pdf"), output_dir = "output", 
                   params = list(
+                    delta = "IRENA",
+                    x_global_for_cumsum = "BNEF_relevant",
                     lead_currency = report_currency,
-                    use_kable: "yes"))
+                    use_kable = TRUE))
 
