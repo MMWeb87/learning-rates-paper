@@ -64,7 +64,9 @@ out.width.default <- "100%"
 combined_plot_interval <- "2006-2016"
 
 filenames <- list(
-  exchange_rates = "input/USD_exchange_rates.csv"
+  exchange_rates = "input/USD_exchange_rates.csv",
+  irena_data = "input/irena-capacity-generation.csv",
+  currency_to_currency_area_translation = "input/currency_to_currency_area_translation.csv"
 )
 
 
@@ -78,6 +80,7 @@ source("functions_learning.R")
 # lead currency is the currency of the learning rate
 T0 <- min(unlist(intervals))
 T_max <- max(unlist(intervals))
+all_years <- as.numeric(T0):as.numeric(T_max)
 
 lead_currency <- params$lead_currency
 
@@ -143,7 +146,7 @@ commissioned_projects <- filter(data_projects,
 relevant_projects <- filter(commissioned_projects,
     capacity >= params$capacity_threshold,
     !is.na(date)) %>% 
-  mutate(subset_name = "BNEF relevant")
+  mutate(subset_name = "BNEF >= 5MW")
 
 non_relevant_projects1 <- filter(commissioned_projects,
     capacity < params$capacity_threshold) %>% 
@@ -203,11 +206,9 @@ projects_with_costs_with_outliers <- relevant_projects_completed %>%
 
 projects_with_costs_with_outliers$local_currency <- as.factor(projects_with_costs_with_outliers$local_currency)
 
-currency_to_currency_area_translation <- read_csv("input/currency_to_currency_area_translation.csv")
 
 country_short_to_currency <- data.frame(currency = country_to_currencycode_mappingtable$currency)
 rownames(country_short_to_currency) <- country_to_currencycode_mappingtable$country_short
-currency_to_currency_area_translation <- select(currency_to_currency_area_translation, currency = "currency", currency_area)
 
 ```
 
@@ -256,7 +257,7 @@ From *projects_with_costs_with_outliers*, we exclude `r n_outliers` projects as 
 
 projects_with_costs_in_interval <- filter(projects_with_costs,
   between(year, T0, T_max)) %>% 
-  mutate(subset_name = "BNEF with costs in interval")
+  mutate(subset_name = "BNEF with costs")
 
 ```
 
@@ -358,7 +359,7 @@ If the parameter is set, we also use the IREAN dataset to calculate market share
 
 # The irena dataset need to have the same format and apply the same criteria as the BNEF dataset (especially capacity threshold)
 
-irena_data <- read_csv("input/irena-capacity-generation.csv") %>% 
+irena_data <- read_csv(filenames$irena_data) %>% 
   filter(
     Product == "Solar photovoltaic" | Product == "Solar Photovoltaic", 
     Type == "ONG",
@@ -370,7 +371,7 @@ irena_data <- read_csv("input/irena-capacity-generation.csv") %>%
   arrange(country, year) %>% # need to sort, as I calculate the difference between each year in a loop
   mutate(capacity = capacity_cum) %>% # the simplest way to set the start capacity in each year 
   add_column(local_currency = NA) %>% 
-  add_column(subset_name = "IRENA all")
+  add_column(subset_name = "IRENA")
 
 irena_data$local_currency <- as.character(irena_data$local_currency)
 
@@ -516,14 +517,14 @@ ggplot(defl_plot, aes(year, defl, col = currency, linetype = currency)) +
 ```
 
 
-## Cummulative sums
+## Cumulative sums
 
 X is the global cumulative deployment in year t -> cummulative sum of x_global (sum of xj) per year
 
-```{r Calculate cummulative sums}
+```{r Calculate cumulative sums, fig.cap="Cumulative sums of different datasubsets", fig.asp=0.9, fig.width=fig.width.baseline * 0.65}
 
 x_global <- list(
-    "BNEF_commissioned" = commissioned_projects,
+#    "BNEF_commissioned" = commissioned_projects,
     "BNEF_relevant" = relevant_projects,
     "BNEF_interval" = projects_with_costs_in_interval,
     "IRENA" = irena_data) %>% 
@@ -534,10 +535,16 @@ x_global %>%
   reduce(bind_rows) %>% 
   group_by(subset_name) %>% 
   mutate(X = cumsum(x_global)) %>% 
-  filter(year <2010) %>% 
-  ggplot(mapping = aes(x = year, y = X)) +
-    geom_line(mapping = aes(linetype = subset_name, colour = subset_name)) 
-           
+  filter(between(year, T0, T_max)) %>% 
+  ggplot(mapping = aes(x = year, y = X/1000)) +
+    geom_line(mapping = aes(linetype = subset_name, colour = subset_name)) +
+    labs(
+      y = "Cumulative PV (>= 5MW) deployment (GW)",
+      colour = "Dataset or subset", linetype = "Dataset or subset") +
+  theme(
+    legend.position = "bottom",
+    axis.title.x = element_blank())
+
 X <- x_global[[params$x_global_for_cumsum]] %>%
   mutate(X = cumsum(x_global)) %>% 
   select(year, X)
@@ -709,51 +716,25 @@ A notable difference to the uncorrected learning rate method, is that we weighti
 
 ```{r Calculation of market shares}
 
+currency_to_currency_area_translation <- read_csv(filenames$currency_to_currency_area_translation) %>% 
+  select(currency = "currency", currency_area) %>% 
+  mutate(currency_area = fct_relevel(currency_area, plot_order_country))
+
+
 # here, x_global needs to be from the same subset, otherwise the marketshare do not sum up to 1
 delta_BNEF <- calculate_delta(projects_with_costs_in_interval, x_global$BNEF_interval)
 delta_IRENA <- calculate_delta(irena_data, x_global$IRENA)
+
+
+get_delta_plot(delta_BNEF, plot_type = "absolute")
+get_delta_plot(delta_IRENA, plot_type = "absolute")
+
 
 if(params$delta == "IRENA"){
   delta <- delta_IRENA
 } else {
   delta <- delta_BNEF
 }
-
-delta$currency <- factor(delta$currency, levels = c(relevant_currencies, "Other"))
-
-## Overview and plot
-all_years <- as.numeric(T0):as.numeric(T_max)
-delta_print <- delta[order(delta$year) & delta$year %in% all_years,] 
-delta_print <- merge(currency_to_currency_area_translation,delta_print)
-
-delta_graph <- delta_print
-delta_graph$currency_area <- as.factor(delta_graph$currency_area)
-delta_graph$currency_area <- factor(delta_graph$currency_area, plot_order_country)
-
-
-colnames(delta_print) <- c("original currency", "currency area", "year","deployment in currency (x)", "sum of deployments", "share (delta)") 
-
-
-delta_plot1 <- ggplot(data=delta_graph, aes(x=year, y=x, fill=currency_area)) +
-  geom_bar( stat='identity') +
-  scale_x_continuous(breaks = seq(2004,2017,1), minor_breaks = NULL) +
-  scale_fill_npg() +
-  labs(x = "", 
-       y = paste0("Added renewable capacity [MW]")) +
-  guides(fill=guide_legend(title="Currency area")) + 
-  theme(axis.text.x = element_text(angle = 90, hjust = 1,vjust = 0.5 ))
-
-delta_plot2 <- ggplot(data=delta_graph, aes(x=year, y=delta, fill=currency_area)) +
-  geom_bar(position = "fill", stat='identity') +
-  scale_x_continuous(breaks = seq(2004,2017,1), minor_breaks = NULL) +
-  scale_fill_npg() +
-  labs(x = "", 
-       y = paste0("Global share of added renewable capacity")) +
-  guides(fill=guide_legend(title="Currency area")) +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1,vjust = 0.5), legend.position="none")
-
-delta_plot_legend <- get_legend(delta_plot1)
-delta_plot1 <- delta_plot1 + theme(legend.position="none")
 
 ```
 

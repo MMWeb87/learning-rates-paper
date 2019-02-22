@@ -17,7 +17,18 @@ rmarkdown::render("analysis_learningrates_corrections.Rmd", output_format = "pdf
                   output_file = paste0(filename, "_IRENA_", report_currency, ".pdf"), output_dir = "output", 
                   params = list(
                     delta = "IRENA",
-                    x_global_for_cumsum = "BNEF_relevant",
+                    x_global_for_cumsum = "IRENA",
                     lead_currency = report_currency,
-                    use_kable = TRUE))
+                    use_kable = TRUE, 
+                    X_norm = FALSE))
+
+#IRENA marketshares
+rmarkdown::render("analysis_learningrates_corrections.Rmd", output_format = "pdf_document", 
+                  output_file = paste0(filename, "_IRENA2_", report_currency, ".pdf"), output_dir = "output", 
+                  params = list(
+                    delta = "IRENA",
+                    x_global_for_cumsum = "IRENA",
+                    lead_currency = report_currency,
+                    use_kable = TRUE, 
+                    X_norm = TRUE))
 

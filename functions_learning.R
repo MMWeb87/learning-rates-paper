@@ -83,6 +83,13 @@ calculate_delta <- function(projects, x_global){
     }
   }
   
+  delta <- delta %>% 
+    arrange(year) %>% 
+    filter(year %in% all_years) %>% 
+    left_join(currency_to_currency_area_translation)
+  
+  delta$currency <- factor(delta$currency, levels = c(relevant_currencies, "Other"))
+  
   return(delta)
   
 }
@@ -121,6 +128,43 @@ get_exchange_rate_for_project <- function(project_date, project_currency) {
 
 
 # Plot functions -----------------------------------------------------------
+
+
+get_delta_plot <- function(delta_data, plot_type = "combined"){
+  
+  delta_plot1 <- ggplot(data=delta_data, aes(x=year, y=x, fill=currency_area)) +
+    geom_bar( stat='identity') +
+    scale_x_continuous(breaks = seq(2004,2017,1), minor_breaks = NULL) +
+    scale_fill_npg() +
+    labs(x = "", 
+         y = paste0("Added renewable capacity [MW]")) +
+    guides(fill=guide_legend(title="Currency area")) + 
+    theme(axis.text.x = element_text(angle = 90, hjust = 1,vjust = 0.5 ))
+  
+  delta_plot2 <- ggplot(data=delta_data, aes(x=year, y=delta, fill=currency_area)) +
+    geom_bar(position = "fill", stat='identity') +
+    scale_x_continuous(breaks = seq(2004,2017,1), minor_breaks = NULL) +
+    scale_fill_npg() +
+    labs(x = "", 
+         y = paste0("Global share of added renewable capacity")) +
+    guides(fill=guide_legend(title="Currency area")) +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1,vjust = 0.5), legend.position="none")
+  
+  
+  delta_plot_legend <- get_legend(delta_plot1)
+  delta_plot1_no_legend <- delta_plot1 + theme(legend.position="none")
+
+  
+  if (plot_type == "absolute"){
+    return(delta_plot1)
+  } else if(plot_type == "relative"){
+    return(delta_plot2)
+  } else {
+    combined_plot <- grid.arrange(delta_plot1_no_legend, delta_plot2, delta_plot_legend, 
+                                  ncol=3, widths=c(2.2, 2.2, 0.9))
+  }
+  
+}
 
 
 # ggplot objects can be passed in ..., or to plotlist (as a list of ggplot objects)
@@ -183,6 +227,7 @@ print_number_table <- function(table, caption, digits = params$default_digits, .
     print(table)
   }
 }
+
 
 
 # Helper functions --------------------------------------------------------
