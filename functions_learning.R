@@ -119,7 +119,7 @@ get_exchange_rate_for_project <- function(project_date, project_currency) {
     ## TODO: fix this function
     
     day_differences <- abs(exchange_rates_per_year$date - project_date)
-    er_date <- which(abs(day_differences) == min(day_differences, na.rm=TRUE))[1] 
+    er_date <- which(abs(day_differences) == min(day_differences, na.rm = TRUE))[1] 
     er <- as.double(exchange_rates[er_date,currency])
   }
   return(er)
@@ -130,25 +130,28 @@ get_exchange_rate_for_project <- function(project_date, project_currency) {
 # Plot functions -----------------------------------------------------------
 
 
-get_delta_plot <- function(delta_data, plot_type = "combined"){
+get_delta_plot <- function(delta_data, plot_type = "combined", legend = FALSE){
   
-  delta_plot1 <- ggplot(data=delta_data, aes(x=year, y=x, fill=currency_area)) +
-    geom_bar( stat='identity') +
-    scale_x_continuous(breaks = seq(2004,2017,1), minor_breaks = NULL) +
+  delta_plot1 <- ggplot(data = delta_data, 
+                        aes(x = year, y = x/1000, fill = currency_area)) +
+    geom_bar(stat = "identity") +
+    scale_x_continuous(breaks = seq(2004, 2017, 1), minor_breaks = NULL) +
     scale_fill_npg() +
     labs(x = "", 
-         y = paste0("Added renewable capacity [MW]")) +
-    guides(fill=guide_legend(title="Currency area")) + 
-    theme(axis.text.x = element_text(angle = 90, hjust = 1,vjust = 0.5 ))
+         y = paste0("Added renewable capacity [GW]")) +
+    guides(fill = guide_legend(title = "Currency area")) + 
+    theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5 ))
   
-  delta_plot2 <- ggplot(data=delta_data, aes(x=year, y=delta, fill=currency_area)) +
-    geom_bar(position = "fill", stat='identity') +
+  delta_plot2 <- ggplot(data = delta_data, 
+                        aes(x = year, y = delta, fill = currency_area)) +
+    geom_bar(position = "fill", stat="identity") +
     scale_x_continuous(breaks = seq(2004,2017,1), minor_breaks = NULL) +
     scale_fill_npg() +
     labs(x = "", 
          y = paste0("Global share of added renewable capacity")) +
     guides(fill=guide_legend(title="Currency area")) +
-    theme(axis.text.x = element_text(angle = 90, hjust = 1,vjust = 0.5), legend.position="none")
+    theme(axis.text.x = element_text(angle = 90, hjust = 1,vjust = 0.5), 
+          legend.position = if_else(legend, "right", "none"))
   
   
   delta_plot_legend <- get_legend(delta_plot1)

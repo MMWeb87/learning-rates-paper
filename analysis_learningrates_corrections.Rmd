@@ -16,7 +16,7 @@ params:
   capacity_threshold: 5
   delta: BNEF
   x_global_for_cumsum: BNEF_relevant
-  X_norm: yes
+  X_norm: no
   X_norm_capacity: 500
   lead_currency: USD
   always_use_yearly_er: yes
@@ -691,9 +691,11 @@ simple_learning_rates_sd <- sapply(simple_learning_rates, sd)
 print_number_table(rbind(simple_learning_rates,"sd"=simple_learning_rates_sd), "Simple learning rates in all currencies. The SD describes the variation between the different learning rates." )
 print_number_table(simple_learning_rates_rsquared, "R-squared values of simple learning rates")
 
+
 simple_learning_rates %>% 
   rownames_to_column(var = "currency") %>% 
   gather(key = "interval", value = "lr", contains("-")) %>% 
+  mutate(interval = fct_relevel(interval, names(intervals))) %>% 
   ggplot(aes(fill = currency, y = lr, x = interval)) + 
     geom_bar(position="dodge", stat="identity") +
     labs(x = "", y = paste0("Learning rate")) +
@@ -720,15 +722,9 @@ currency_to_currency_area_translation <- read_csv(filenames$currency_to_currency
   select(currency = "currency", currency_area) %>% 
   mutate(currency_area = fct_relevel(currency_area, plot_order_country))
 
-
 # here, x_global needs to be from the same subset, otherwise the marketshare do not sum up to 1
 delta_BNEF <- calculate_delta(projects_with_costs_in_interval, x_global$BNEF_interval)
 delta_IRENA <- calculate_delta(irena_data, x_global$IRENA)
-
-
-get_delta_plot(delta_BNEF, plot_type = "absolute")
-get_delta_plot(delta_IRENA, plot_type = "absolute")
-
 
 if(params$delta == "IRENA"){
   delta <- delta_IRENA
@@ -743,12 +739,22 @@ if(params$delta == "IRENA"){
 
 The market share of PV deplyoment in each currency and year is relevant. To calculate the market share of different currencies, we derive delta values from BNEF and IRENA datasets. Figure 1 visualises the market shares as a function of the currency.
 
-```{r Marketshare plots, fig.width = 11, fig.cap = "Capacity additions per year and currency area", fig.width=fig.width.baseline, fig.asp=0.45, out.width=out.width.default}
+```{r Marketshare plots comparison, fig.width = 11, fig.cap = "Comparison of capacity additions per year and currency area in BNEF and IRENA dataset", fig.width=fig.width.baseline, fig.asp=0.45, out.width=out.width.default}
+
+bind_rows(delta_BNEF,delta_IRENA) %>% 
+  get_delta_plot(plot_type = "absolute") +
+  facet_grid(cols = vars(subset_name))
+
+bind_rows(delta_BNEF,delta_IRENA,) %>% 
+  get_delta_plot(plot_type = "relative", legend = TRUE) +
+  facet_grid(cols = vars(subset_name))
 
 
-grid.arrange(delta_plot1,delta_plot2, delta_plot_legend, ncol=3, widths=c(2.2, 2.2, 0.9))
+```
 
-#print_number_table(delta_print, "Shares of deployment")
+```{r Marketshare plots current, fig.width = 11, fig.cap = "Capacity additions per year and currency area", fig.width=fig.width.baseline, fig.asp=0.45, out.width=out.width.default}
+
+get_delta_plot(delta)
 
 ```
 
@@ -964,7 +970,6 @@ combined_plot_data <- bind_rows(corrected_learning_rates, uncorrected_learning_r
 
 # To be consistent with the paper, I change the naming of the types here
 combined_plot_data$type <- factor(combined_plot_data$type, labels = c("corrected", "uncorrected"))
-
 combined_plot_data$currency <- factor(combined_plot_data$currency, plot_order_currency) # order
 
 rm(corrected_learning_rates, uncorrected_learning_rates)
@@ -1016,6 +1021,17 @@ ggplot(combined_plot_data_normed, aes(cumulative_capacity/1000, normed_average_c
   
   theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
   scale_color_npg()
+
+
+combined_plot_data %>% 
+  rownames_to_column(var = "currency") %>% 
+  gather(key = "interval", value = "lr", contains("-")) %>% 
+  mutate(interval = fct_relevel(interval, names(intervals))) %>% 
+  ggplot(aes(fill = currency, y = lr, x = interval)) + 
+    geom_bar(position="dodge", stat="identity") +
+    labs(x = "", y = paste0("Learning rate")) +
+    guides(fill=guide_legend(title="Currency")) +   
+    scale_fill_npg()
 
 ```
 

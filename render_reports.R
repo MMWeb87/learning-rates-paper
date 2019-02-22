@@ -8,6 +8,7 @@ rmarkdown::render("analysis_learningrates_corrections.Rmd", output_format = "pdf
                   output_file = paste0(filename, "_BNEF_", report_currency, ".pdf"), output_dir = "output", 
                   params = list(
                     delta = "BNEF",
+                    x_global_for_cumsum = "BNEF_relevant",
                     use_kable = TRUE,
                     lead_currency = report_currency))
 
