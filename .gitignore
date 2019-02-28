@@ -64,3 +64,6 @@ input/data_PV_all_nominal.csv
 sources/copyright/
 
 analysis_learningrates_corrections.nb.html
+
+*.log
+
