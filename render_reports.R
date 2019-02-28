@@ -33,3 +33,27 @@ rmarkdown::render("analysis_learningrates_corrections.Rmd", output_format = "pdf
                     use_kable = TRUE, 
                     X_norm = TRUE))
 
+# Set to the same norm ----------------------------------------------------
+
+#BNEF marketshares
+rmarkdown::render("analysis_learningrates_corrections.Rmd", output_format = "pdf_document", 
+                  output_file = paste0(filename, "_BNEF_samestart_", report_currency, ".pdf"), output_dir = "output", 
+                  params = list(
+                    delta = "BNEF",
+                    x_global_for_cumsum = "BNEF_relevant",
+                    X_norm_capacity = 2750, 
+                    X_norm = TRUE,
+                    use_kable = TRUE))
+
+
+#IRENA marketshares
+rmarkdown::render("analysis_learningrates_corrections.Rmd", output_format = "pdf_document", 
+                  output_file = paste0(filename, "_IRENA_samestart_", report_currency, ".pdf"), output_dir = "output", 
+                  params = list(
+                    delta = "IRENA",
+                    x_global_for_cumsum = "IRENA",
+                    X_norm_capacity = 2750, 
+                    X_norm = TRUE,
+                    use_kable = TRUE))
+
+
