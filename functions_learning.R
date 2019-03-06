@@ -34,7 +34,7 @@ calculate_learning_rate <- function(costs, cumulative_capacity, digits = 2){
   
   l <- list(
     learning_rate = as.double(round(learning_rate*100,digits)),
-    rsquared = round(rsquared*100,digits),
+    rsquared = round(rsquared,2),
     summary = summary(fit.lm.log)
   )
   
@@ -231,6 +231,13 @@ print_number_table <- function(table, caption, digits = params$default_digits, .
   }
 }
 
+print_learning_rates_result <- function(learning_rates, rsquared, group, label){
+  full_join(
+    learning_rates, rsquared, 
+    by = group,  suffix = c("", ".R2")) %>% 
+    select(!!group, contains("2006-2011"), contains("2012-2016"), contains("2006-2016")) %>% 
+    print_number_table(label)
+}
 
 
 # Helper functions --------------------------------------------------------
@@ -277,5 +284,22 @@ convert_location_to_currency <- function(location){
   return(currency)
   
 } 
+
+
+
+matrix_to_tibble <- function(matrix, colnames, groups, group_name){
+  
+  matrix <- as.data.frame(matrix)
+  colnames(matrix) <- colnames
+  
+  as_tibble(matrix) %>% 
+    add_column(group = groups) %>% 
+    select(!!quo_name(group_name) := group, everything())
+}
+
+# turns a nested list of lists into a matrix with as many rows as objects in the first level are
+nested_list_to_matrix <- function(list){
+  matrix(unlist(list), nrow = length(list), byrow = TRUE)
+}
 
 

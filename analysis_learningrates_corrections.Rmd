@@ -21,7 +21,7 @@ params:
   lead_currency: USD
   always_use_yearly_er: yes
   exchange_rate_norm_year: 2010
-  default_digits: 0
+  default_digits: 2
   debug: no
   use_kable: no
 subtitle: Sourcefile and calculations
@@ -676,32 +676,19 @@ rm(currency)
 
 ### Results
 
-```{r Learning rate bar graph and table, fig.cap="Simple learning rates in different intervals.", fig.width=fig.width.baseline * 0.7, fig.asp= 0.7}
+```{r Learning rate table, fig.cap="Simple learning rates in different intervals.", fig.width=fig.width.baseline * 0.7, fig.asp= 0.7}
 
-simple_learning_rates <- data.frame(simple_learning_rates_matrix)
-rownames(simple_learning_rates) <- relevant_currencies
-colnames(simple_learning_rates) <- names(intervals)
+results <- list()
 
-simple_learning_rates_rsquared <- data.frame(simple_learning_rates_rsquared_matrix)
-rownames(simple_learning_rates_rsquared) <- relevant_currencies
-colnames(simple_learning_rates_rsquared) <- names(intervals)
+results[["simple_learning_rates"]] <- simple_learning_rates_matrix %>% 
+  matrix_to_tibble(names(intervals), relevant_currencies, "currency")
 
-simple_learning_rates_sd <- sapply(simple_learning_rates, sd)
+results[["simple_learning_rates_rsquared"]] <- simple_learning_rates_rsquared_matrix %>% 
+  matrix_to_tibble(names(intervals), relevant_currencies, "currency")
 
-print_number_table(rbind(simple_learning_rates,"sd"=simple_learning_rates_sd), "Simple learning rates in all currencies. The SD describes the variation between the different learning rates." )
-print_number_table(simple_learning_rates_rsquared, "R-squared values of simple learning rates")
-
-
-simple_learning_rates %>% 
-  rownames_to_column(var = "currency") %>% 
-  gather(key = "interval", value = "lr", contains("-")) %>% 
-  mutate(interval = fct_relevel(interval, names(intervals))) %>% 
-  ggplot(aes(fill = currency, y = lr, x = interval)) + 
-    geom_bar(position="dodge", stat="identity") +
-    labs(x = "", y = paste0("Learning rate")) +
-    guides(fill=guide_legend(title="Currency")) +   
-    scale_fill_npg()
-
+print_learning_rates_result(
+  results[["simple_learning_rates"]], results[["simple_learning_rates_rsquared"]], 
+  "currency", "Simple learning rates in all currencies")
 
 ```
 
@@ -907,18 +894,17 @@ We get the following learning rates using the corrected learning rates approach:
 
 ```{r Results table}
 
-corrected_learning_rates <- matrix(unlist(corrected_learning_rates_list), ncol = length(intervals), byrow = TRUE)
-corrected_learning_rates_rsquared <- matrix(unlist(corrected_learning_rates_rsquared_list), ncol = length(intervals), byrow = TRUE)
+results[["corrected_learning_rates"]] <- corrected_learning_rates_list %>% 
+  nested_list_to_matrix() %>% 
+  matrix_to_tibble(names(intervals), types, "type")
 
-colnames(corrected_learning_rates) <- names(intervals)
-rownames(corrected_learning_rates) <- types
+results[["corrected_learning_rates_rsquared"]] <- corrected_learning_rates_rsquared_list %>% 
+  nested_list_to_matrix() %>% 
+  matrix_to_tibble(names(intervals), types, "type")
 
-colnames(corrected_learning_rates_rsquared) <- names(intervals)
-rownames(corrected_learning_rates_rsquared) <- types
-
-print_number_table(corrected_learning_rates, paste("Global learning rates in lead currency", lead_currency))
-print_number_table(corrected_learning_rates_rsquared, "R-squared of global learning rates")
-
+print_learning_rates_result(
+  results[["corrected_learning_rates"]], results[["corrected_learning_rates_rsquared"]], 
+  "type", paste("Global learning rates in lead currency", lead_currency))
 
 ```
 
@@ -941,100 +927,28 @@ ggplot(data_for_plots, aes(capacity/1000, costs)) +
  
 ```
 
-### Combined plot
+## Combined plot of simple and corrected learning rates
 
-Plotting all learning rates in the same plot, it is necessary to norm the costs. To do this, we select one random project and devide all average global costs by that project's value. We then get 1/W for all average costs and can compare the learning rates. The norm project is the following.
+Comparison with the simple learning rates for every country
 
-```{r }
+```{r Combined plot, fig.cap="Learning rates plot", fig.width=fig.width.baseline * 0.8, fig.asp=0.6}
 
-uncorrected_learning_rates <- average_global_costs_real %>% 
-  inner_join(X) %>% 
-  select(
-    year, 
-    average_costs = real_costs, 
-    currency, 
-    cumulative_capacity = X) %>% 
-  add_column(type = "uncorrected")
+bind_rows(
+    add_column(results$simple_learning_rates, type = "uncorrected"),
+    add_column(results$corrected_learning_rates, currency = "USD")) %>% 
+  filter(type != "unadjusted") %>%
+  mutate(type = fct_recode(type, "corrected" = "adjusted")) %>% 
 
-corrected_learning_rates <- select(corrected_learning_rates_data_list$adjusted[[combined_plot_interval]],
-  year = years, 
-  average_costs = costs, 
-  currency = lead_currency, 
-  cumulative_capacity = capacity,
-  type) %>% 
-  as_tibble()
-
-combined_plot_data <- bind_rows(corrected_learning_rates, uncorrected_learning_rates) %>% 
-  filter(year >= T0, year <= T_max)
-
-
-# To be consistent with the paper, I change the naming of the types here
-combined_plot_data$type <- factor(combined_plot_data$type, labels = c("corrected", "uncorrected"))
-combined_plot_data$currency <- factor(combined_plot_data$currency, plot_order_currency) # order
-
-rm(corrected_learning_rates, uncorrected_learning_rates)
-
-
-norm_project <- projects_with_costs_in_currencies %>% 
-  filter(year == "2010") %>% 
-  filter(row_number()==1)
-  
-norm_projects <- norm_project %>% 
-  select(one_of(relevant_currencies)) %>% 
-  gather(everything(), key = "currency", value = "norm_value")
-
-combined_plot_data_normed <- combined_plot_data %>% 
-  inner_join(norm_projects, by = "currency") %>% 
-  mutate(normed_average_costs = average_costs / norm_value) %>% 
-  arrange(type, currency, year)
-
-norm_project
-
-```
-
-A combined plot over the interval of: `R params$combined_plot_interval`.
-
-```{r Combined plot, fig.cap="Comparison of the simple (thin lines) and currency-corrected (think line) learning rates.", fig.width=fig.width.baseline * 0.8, fig.asp=0.6}
-
-
-ggplot(combined_plot_data_normed, aes(cumulative_capacity/1000, normed_average_costs)) +
-  geom_point(aes(col=currency, size=type)) +
-  geom_smooth(data=. %>% filter(type=="uncorrected"), 
-    aes(col=currency, linetype = currency, size=type), 
-    method="lm", formula = (y ~ x), se=FALSE) +
-  geom_smooth(data=. %>% filter(type=="corrected"), 
-    linetype = "solid", aes(size=type), 
-    method="lm", formula = (y ~ x), se=FALSE, col="black") +
-  
-  scale_linetype_manual(values = plot_order_linetype) +
-  scale_size_manual(values = c("uncorrected" = 0.6, "corrected" = 1.6)) +
-  scale_x_continuous(trans="log", breaks = c(c(1,seq(2,10,2)) %o% 10^(0:4)), minor_breaks = 0.5) +
-  scale_y_continuous(trans="log", breaks = seq(0,8,0.5), minor_breaks = NULL) +
-  guides(
-    linetype = guide_legend(title="Learning rate"), 
-    col = guide_legend(title="Learning rate"), 
-    size = guide_legend(title="Type")) +
-  
-  labs(x = "Cumulative capacity [GW]", 
-       y = paste0("Index of average yearly 2017-costs per MW"),
-       subtitle = paste("The data is an index of a project from", norm_project$year,"(financed in", norm_project$local_currency, ", capacity of", norm_project$capacity, "MW)")) +
-  
-  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
-  scale_color_npg()
-
-
-combined_plot_data %>% 
-  rownames_to_column(var = "currency") %>% 
   gather(key = "interval", value = "lr", contains("-")) %>% 
   mutate(interval = fct_relevel(interval, names(intervals))) %>% 
   ggplot(aes(fill = currency, y = lr, x = interval)) + 
     geom_bar(position="dodge", stat="identity") +
     labs(x = "", y = paste0("Learning rate")) +
     guides(fill=guide_legend(title="Currency")) +   
-    scale_fill_npg()
+    scale_fill_npg() + 
+    facet_grid(cols = vars(type), space = "free_x")
 
 ```
-
 
 
 \clearpage
