@@ -15,9 +15,10 @@ output:
 params:
   capacity_threshold: 5
   delta: BNEF
-  x_global_for_cumsum: BNEF_relevant
+  x_global_for_cumsum: BNEF with date
   X_norm: no
   X_norm_capacity: 500
+  X_norm_year: 2006
   lead_currency: USD
   always_use_yearly_er: yes
   exchange_rate_norm_year: 2010
@@ -34,7 +35,8 @@ library(knitr)
 library(ggsci)
 library(gridExtra)
 library(tidyverse)
-library(lubridate) # year function
+library(lubridate)
+library(cowplot)
 
 knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
 theme_set(theme_bw(base_size = 9.5) + theme(legend.title=element_blank()))
@@ -46,6 +48,8 @@ theme_set(theme_bw(base_size = 9.5) + theme(legend.title=element_blank()))
 
 # to accept these relevant currencies, they need to be in the currency_translation table
 relevant_currencies <- c("CNY","EUR","GBP","INR","JPY","USD")
+
+table_order_currency <- c("USD", "EUR", "JPY", "CNY", "INR", "GBP")
 
 plot_order_currency <- relevant_currencies
 plot_order_country <- c("China", "Euro Area", "United Kingdom", "India", "Japan", "United States", "ROW")
@@ -92,7 +96,6 @@ all_subset_intervals <- list(
 names(intervals) <- make_interval_names(intervals)
 
 ```
-Date: \today
 
 # Results for PV -- in lead currency `r params$lead_currency` & with `r params$delta` marketshare 
 
@@ -143,10 +146,13 @@ commissioned_projects <- filter(data_projects,
     status == "Commissioned") %>% 
   mutate(subset_name = "BNEF commissioned")
 
-relevant_projects <- filter(commissioned_projects,
-    capacity >= params$capacity_threshold,
-    !is.na(date)) %>% 
+large_projects <- filter(commissioned_projects,
+    capacity >= params$capacity_threshold) %>% 
   mutate(subset_name = "BNEF >= 5MW")
+
+relevant_projects <- filter(large_projects,
+    !is.na(date)) %>% 
+  mutate(subset_name = "BNEF with date")
 
 non_relevant_projects1 <- filter(commissioned_projects,
     capacity < params$capacity_threshold) %>% 
@@ -275,6 +281,9 @@ stats[["capacity"]][["all_projects"]] <- sum(data_projects$capacity, na.rm = T)
 stats[["number"]][["commissioned_projects"]] <- nrow(commissioned_projects)
 stats[["capacity"]][["commissioned_projects"]] <- sum(commissioned_projects$capacity, na.rm = T)
 
+stats[["number"]][["large_projects"]] <- nrow(large_projects)
+stats[["capacity"]][["large_projects"]] <- sum(large_projects$capacity)
+
 stats[["number"]][["relevant_projects"]] <- nrow(relevant_projects)
 stats[["capacity"]][["relevant_projects"]] <- sum(relevant_projects$capacity)
 
@@ -301,54 +310,63 @@ stats[["capacity_share"]] <- stats$capacity/stats[["capacity"]][["commissioned_p
 
 ## Overview table
 summary_table_rows <- 5
-summary_table <- data.frame(
-  "description" = character(summary_table_rows),
-  "projects" = numeric(summary_table_rows),
-  "project share" = numeric(summary_table_rows),
-  "capacity" = numeric(summary_table_rows),
-  "capacity share" = numeric(summary_table_rows),
-  stringsAsFactors = F
-)
+summary_table <- tibble(
+  "Filter criterium" = character(summary_table_rows),
+  "Projects" = numeric(summary_table_rows),
+  "Share projects" = numeric(summary_table_rows),
+  "Capacity" = numeric(summary_table_rows),
+  "Share capacity" = numeric(summary_table_rows))
 
-summary_table[1,] <- list("all", stats[["number"]][["all_projects"]], NA, stats[["capacity"]][["all_projects"]], NA)
+summary_table[1,] <- list("All BNEF projects", stats[["number"]][["all_projects"]], NA, stats[["capacity"]][["all_projects"]], NA)
 
 
-summary_table[2,]  <- list("all commissioned", stats[["number"]][["commissioned_projects"]], 1, stats[["capacity"]][["commissioned_projects"]], 1)
+summary_table[2,]  <- list("Commissioned projects", stats[["number"]][["commissioned_projects"]], 1, stats[["capacity"]][["commissioned_projects"]], 1)
 
-summary_table[3,]  <- list("all relevant", 
+summary_table[3,]  <- list("Capacity >= 5MW", 
+                           stats[["number"]][["large_projects"]],
+                           stats[["number_share"]][["large_projects"]],
+                           stats[["capacity"]][["large_projects"]],
+                           stats[["capacity_share"]][["large_projects"]])
+
+
+summary_table[4,]  <- list("With financing date reported", 
                            stats[["number"]][["relevant_projects"]],
                            stats[["number_share"]][["relevant_projects"]],
                            stats[["capacity"]][["relevant_projects"]],
                            stats[["capacity_share"]][["relevant_projects"]])
 
-summary_table[4,]  <- list("all relevant with costs and outliers", 
+summary_table[5,]  <- list("With financing costs reported", 
                            stats[["number"]][["relevant_projects_with_costs_with_outliers"]],
                            stats[["number_share"]][["relevant_projects_with_costs_with_outliers"]],
                            stats[["capacity"]][["relevant_projects_with_costs_with_outliers"]],
                            stats[["capacity_share"]][["relevant_projects_with_costs_with_outliers"]])
 
-summary_table[5,]  <- list("all relevant with costs", 
+summary_table[6,]  <- list("Without outliers", 
                            stats[["number"]][["relevant_projects_with_costs"]],
                            stats[["number_share"]][["relevant_projects_with_costs"]],
                            stats[["capacity"]][["relevant_projects_with_costs"]],
                            stats[["capacity_share"]][["relevant_projects_with_costs"]])
 
-summary_table[6,]  <- list("all relevant with costs in interval", 
+summary_table[7,]  <- list(paste("Between", names(intervals[3])), 
                            stats[["number"]][["relevant_projects_with_costs_in_interval"]],
                            stats[["number_share"]][["relevant_projects_with_costs_in_interval"]],
                            stats[["capacity"]][["relevant_projects_with_costs_in_interval"]],
                            stats[["capacity_share"]][["relevant_projects_with_costs_in_interval"]])
 
+# Remove all projects for report. In GW.
+summary_table_print <- summary_table %>% 
+  mutate(Capacity  = Capacity/1000) %>% 
+  slice(-1)
+  
 
-print_number_table(table = summary_table, caption = "Summary of dataset. The share relates to the commissioned", digits = 2)
-
+print_number_table(summary_table_print, caption = "Summary of our subsets of the BNEF dataset. All lower rows include the filter criteria from the upper rows. Capacity in GW.", digits = 2)
 
 
 ```
 
-The BNEF dataset contains a total of `r stats[["number"]][["all_projects"]]` PV projects, of which `r stats[["number"]][["commissioned_projects"]]` are commissioned. Of those commissioned projects, we consider `r stats[["number"]][["relevant_projects"]]` as relevant because they have a capacity of >= `r params$capacity_threshold` MW, which is an indication that their local-cost component is low. Among the comissioned projects, some are not relevant (to caluclate learning rates) because they are either below that threshold (`r stats[["number"]][["non_relevant_projects1"]]`), above but miss a financing date record (`r stats[["number"]][["non_relevant_projects2"]]`) or are reported in other, minor currencies. 
+The BNEF dataset contains a total of `r stats[["number"]][["all_projects"]]` PV projects, of which `r stats[["number"]][["commissioned_projects"]]` are commissioned. Of those commissioned projects, we consider `r stats[["number"]][["relevant_projects"]]` as relevant because they have a capacity of >= `r params$capacity_threshold` MW. Among the comissioned projects, some are not relevant (to caluclate learning rates) because they are either below that threshold (`r stats[["number"]][["non_relevant_projects1"]]`), above but miss a financing date record (`r stats[["number"]][["non_relevant_projects2"]]`) or are reported in other, minor currencies. 
 
-Finally, only **`r stats[["number"]][["relevant_projects_with_costs"]]` projects** have a financing costs in one of the relevant currencies. We use these projects , i.e. `r round(stats[["capacity_share"]][["relevant_projects_with_costs"]]*100,1)`% of worldwide capacity to calculate the learning rates.These numbers and the corresponding capacity they represent are sumarised in the table below.
+Finally, only **`r stats[["number"]][["relevant_projects_with_costs_in_interval"]]` projects** have a financing costs in one of the relevant currencies and our interval. We use these projects , i.e. `r round(stats[["capacity_share"]][["relevant_projects_with_costs_in_interval"]]*100,1)`% of worldwide capacity to calculate the learning rates. These numbers and the corresponding capacity they represent are sumarised in the table.
 
 
 ## Load and prepare IRENA data
@@ -530,11 +548,13 @@ x_global <- list(
     "IRENA" = irena_data) %>% 
   map(calculate_cummulative_sums)
 
-# to decide which cumsums to take
-x_global %>% 
+X_all_subsets <- x_global %>% 
   reduce(bind_rows) %>% 
   group_by(subset_name) %>% 
-  mutate(X = cumsum(x_global)) %>% 
+  mutate(X = cumsum(x_global))
+
+# to decide which cumsums to take
+X_all_subsets %>%  
   filter(between(year, T0, T_max)) %>% 
   ggplot(mapping = aes(x = year, y = X/1000)) +
     geom_line(mapping = aes(linetype = subset_name, colour = subset_name)) +
@@ -545,12 +565,13 @@ x_global %>%
     legend.position = "bottom",
     axis.title.x = element_blank())
 
-X <- x_global[[params$x_global_for_cumsum]] %>%
-  mutate(X = cumsum(x_global)) %>% 
+X <- X_all_subsets %>% 
+  filter(subset_name == params$x_global_for_cumsum) %>% 
   select(year, X)
 
+
 if(params$X_norm){
-  normyear_value <- filter(X, year == T0) %>% pull(X)
+  normyear_value <- filter(X, year == params$X_norm_year) %>% pull(X)
   X <- X %>% 
     mutate(X = X - normyear_value + params$X_norm_capacity)
 }
@@ -681,11 +702,14 @@ rm(currency)
 results <- list()
 
 results[["simple_learning_rates"]] <- simple_learning_rates_matrix %>% 
-  matrix_to_tibble(names(intervals), relevant_currencies, "currency")
+  matrix_to_tibble(names(intervals), relevant_currencies, "currency") %>% 
+  arrange_by_currencies(table_order_currency)
 
 results[["simple_learning_rates_rsquared"]] <- simple_learning_rates_rsquared_matrix %>% 
-  matrix_to_tibble(names(intervals), relevant_currencies, "currency")
+  matrix_to_tibble(names(intervals), relevant_currencies, "currency") %>% 
+  arrange_by_currencies(table_order_currency)
 
+  
 print_learning_rates_result(
   results[["simple_learning_rates"]], results[["simple_learning_rates_rsquared"]], 
   "currency", "Simple learning rates in all currencies")
@@ -933,20 +957,28 @@ Comparison with the simple learning rates for every country
 
 ```{r Combined plot, fig.cap="Learning rates plot", fig.width=fig.width.baseline * 0.8, fig.asp=0.6}
 
-bind_rows(
+combined_plot_data <- bind_rows(
     add_column(results$simple_learning_rates, type = "uncorrected"),
     add_column(results$corrected_learning_rates, currency = "USD")) %>% 
   filter(type != "unadjusted") %>%
-  mutate(type = fct_recode(type, "corrected" = "adjusted")) %>% 
-
   gather(key = "interval", value = "lr", contains("-")) %>% 
-  mutate(interval = fct_relevel(interval, names(intervals))) %>% 
-  ggplot(aes(fill = currency, y = lr, x = interval)) + 
+  mutate(
+    type = fct_recode(type, "corrected" = "adjusted"),
+    interval = fct_relevel(interval, names(intervals)), 
+    legend = ifelse(type == "corrected", paste0(currency, " (", type, ")"), currency),
+    legend = fct_relevel(legend, "USD (corrected)", after = Inf))
+
+
+
+mypal = pal_npg("nrc")(length(relevant_currencies))
+
+combined_plot_data %>% 
+  ggplot(aes(fill = legend, y = lr, x = interval)) + 
     geom_bar(position="dodge", stat="identity") +
+    scale_fill_manual(values = c(mypal,"#000000")) +
     labs(x = "", y = paste0("Learning rate")) +
-    guides(fill=guide_legend(title="Currency")) +   
-    scale_fill_npg() + 
-    facet_grid(cols = vars(type), space = "free_x")
+    guides(fill=guide_legend(title="Currency"))    
+
 
 ```
 

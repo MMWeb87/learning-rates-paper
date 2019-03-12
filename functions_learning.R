@@ -232,16 +232,27 @@ print_number_table <- function(table, caption, digits = params$default_digits, .
 }
 
 print_learning_rates_result <- function(learning_rates, rsquared, group, label){
+  
   full_join(
-    learning_rates, rsquared, 
-    by = group,  suffix = c("", ".R2")) %>% 
+      learning_rates, rsquared, 
+      by = group,  suffix = c("", ".R2")) %>% 
     select(!!group, contains("2006-2011"), contains("2012-2016"), contains("2006-2016")) %>% 
     print_number_table(label)
+  
 }
+
+
 
 
 # Helper functions --------------------------------------------------------
 
+arrange_by_currencies <- function(table, currency_order){
+  
+  table %>% 
+    mutate(currency = fct_relevel(currency, !!currency_order)) %>% 
+    arrange(currency) 
+  
+}
 
 make_interval_names <- function(intervals_list){
   
