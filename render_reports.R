@@ -64,6 +64,7 @@ rmarkdown::render("analysis_learningrates_corrections.Rmd", output_format = "wor
 # Results for the corrected learning rate should be the same in every base currency
 
 report_currencies <- c("CNY","EUR","GBP","INR","JPY","USD")
+filename <- paste("analysis_PV",Sys.Date(),sep = "_")
 
 for(report_currency in report_currencies){
   

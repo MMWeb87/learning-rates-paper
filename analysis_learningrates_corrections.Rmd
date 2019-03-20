@@ -812,20 +812,16 @@ In the third step, we aggregate the data by yearly averages for each currency. T
 
 C <- average_local_costs
 
-P <- tibble(
-  "currency" = lead_currency,
-  "year" = all_years,
-  "nominal_costs" = numeric(length(all_years))
-)
+numeric_P_comp <- numeric(length(all_years) * length(relevant_currencies))
 
-P_tilde <- P
-P_real <- P
-P_tilde_real <- P
+P_comp <- tibble(
+  "lead_currency" = lead_currency,
+  "currency" = rep(relevant_currencies, length(all_years)),
+  "year" = rep(all_years, length(relevant_currencies)),
+  "nominal_costs" = numeric_P_comp
+) %>% inner_join(defl, by = c("currency", "year"))
 
-alphas <- tibble(
-  "year" = all_years,
-  "alpha" = numeric(length(all_years))
-)
+P_comp_tilde <- P_comp
 
 for(t in all_years){
   
@@ -836,24 +832,33 @@ for(t in all_years){
     w_i_0 <- filter(exchange_rates_per_year, year == T0, currency == i) %>% pull(rate)
     C_i_t <- filter(C, year == t, currency == i) %>% pull(C)
     
-    # weighted average global cost converted to lead currency l in year t
-    P[P$year == t, "nominal_costs"] <- P[P$year == t, "nominal_costs"] + delta_i_t * w_i_t * C_i_t
-    P_tilde[P_tilde$year == t, "nominal_costs"] <- P_tilde[P_tilde$year == t, "nominal_costs"] + delta_i_t * w_i_0 * C_i_t
+    P_comp[P_comp$year == t & P_comp$currency == i, "nominal_costs"] <- delta_i_t * w_i_t * C_i_t
+    P_comp_tilde[P_comp$year == t & P_comp$currency == i, "nominal_costs"] <- delta_i_t * w_i_0 * C_i_t
+
 
   }
   
-  alphas[alphas$year == t, "alpha"] <- P_tilde[P_tilde$year == t, "nominal_costs"]  / P[P$year == t, "nominal_costs"]
-
 }
+
+# calculate weighted average global cost converted to lead currency l in year t
+
+P_comp_sum<- P_comp %>% 
+  mutate(real_costs = nominal_costs / defl) %>% 
+  group_by(year, lead_currency) %>% 
+  summarise(P_nominal = sum(nominal_costs), P_real = sum(real_costs))
+
+P_comp_tilde_sum <- P_comp_tilde %>% 
+  mutate(real_costs = nominal_costs / defl) %>% 
+  group_by(year, lead_currency) %>% 
+  summarise(P_nominal = sum(nominal_costs), P_real = sum(real_costs))
+
+P <- select(P_comp_sum, currency = lead_currency, year, costs = P_nominal)
+P_real <- select(P_comp_sum, currency = lead_currency, year, costs = P_real)
+P_tilde <- select(P_comp_tilde_sum, currency = lead_currency, year, costs = P_nominal)
+P_tilde_real <- select(P_comp_tilde_sum, currency = lead_currency, year, costs = P_real)
+
 ```
 
-### Step 4: Convert to real values
-
-```{r}
-lead_currency_defl <- filter(defl, currency == lead_currency)
-P_real <- convert_to_real_costs(P, lead_currency_defl)
-P_tilde_real <- convert_to_real_costs(P_tilde, lead_currency_defl)
-```
 
 ### Step 5: Calculation of the learning rate
 
@@ -886,7 +891,7 @@ for(type in types){
     
     regression_costs <- relevant_P %>% 
       filter(year %in% interval_years) %>% 
-      pull(real_costs)
+      pull(costs)
     
     regression_cumulative_capacity <- X %>% 
       filter(year %in% interval_years) %>% 
@@ -903,7 +908,6 @@ for(type in types){
       years = interval_years,
       capacity = regression_cumulative_capacity,
       costs = regression_costs,
-      alpha = alphas[alphas$year %in% interval_years, ],
       type = type,
       interval = interval_name
     )
