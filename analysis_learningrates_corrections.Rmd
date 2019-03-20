@@ -756,7 +756,7 @@ bind_rows(delta_BNEF,delta_IRENA) %>%
   get_delta_plot(plot_type = "absolute") +
   facet_grid(cols = vars(subset_name))
 
-bind_rows(delta_BNEF,delta_IRENA,) %>% 
+bind_rows(delta_BNEF,delta_IRENA) %>% 
   get_delta_plot(plot_type = "relative", legend = TRUE) +
   facet_grid(cols = vars(subset_name))
 
