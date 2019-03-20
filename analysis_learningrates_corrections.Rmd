@@ -19,7 +19,7 @@ params:
   X_norm: no
   X_norm_capacity: 500
   X_norm_year: 2006
-  lead_currency: USD
+  lead_currency: CNY
   always_use_yearly_er: yes
   exchange_rate_norm_year: 2010
   default_digits: 2

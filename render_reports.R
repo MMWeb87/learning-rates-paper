@@ -59,3 +59,23 @@ rmarkdown::render("analysis_learningrates_corrections.Rmd", output_format = "wor
 
 
 
+# Comparison of currencies ------------------------------------------------
+
+# Results for the corrected learning rate should be the same in every base currency
+
+report_currencies <- c("CNY","EUR","GBP","INR","JPY","USD")
+
+for(report_currency in report_currencies){
+  
+  rmarkdown::render("analysis_learningrates_corrections.Rmd", output_format = "word_document", 
+                    output_file = paste0(filename, "_IRENA_", report_currency, ".docx"), output_dir = "output/currency_comparison", 
+                    params = list(
+                      delta = "IRENA",
+                      x_global_for_cumsum = "IRENA",
+                      lead_currency = report_currency,
+                      use_kable = TRUE, 
+                      X_norm = FALSE))
+
+  }
+
+
