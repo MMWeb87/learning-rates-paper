@@ -769,14 +769,6 @@ get_delta_plot(delta)
 
 ```
 
-The following table shows the share of all PV capacity between 2006 and 2016
-
-```{r}
-
-#kable(delta_print_all, digits=3, caption = "Shares of deployment", row.names = F)
-
-```
-
 
 ### Step 2: Calculation of the formula variable
 
@@ -840,22 +832,8 @@ for(t in all_years){
   
 }
 
-# calculate weighted average global cost converted to lead currency l in year t
-
-P_comp_sum<- P_comp %>% 
-  mutate(real_costs = nominal_costs / defl) %>% 
-  group_by(year, lead_currency) %>% 
-  summarise(P_nominal = sum(nominal_costs), P_real = sum(real_costs))
-
-P_comp_tilde_sum <- P_comp_tilde %>% 
-  mutate(real_costs = nominal_costs / defl) %>% 
-  group_by(year, lead_currency) %>% 
-  summarise(P_nominal = sum(nominal_costs), P_real = sum(real_costs))
-
-P <- select(P_comp_sum, currency = lead_currency, year, costs = P_nominal)
-P_real <- select(P_comp_sum, currency = lead_currency, year, costs = P_real)
-P_tilde <- select(P_comp_tilde_sum, currency = lead_currency, year, costs = P_nominal)
-P_tilde_real <- select(P_comp_tilde_sum, currency = lead_currency, year, costs = P_real)
+P <- calculate_P(P_comp)
+P_tilde <- calculate_P(P_comp_tilde)
 
 ```
 
@@ -884,9 +862,9 @@ for(type in types){
     interval_name <- names(intervals[i])
     
     if(type == "unadjusted"){
-      relevant_P <- P_real
+      relevant_P <- P$P_real
     } else {
-      relevant_P <- P_tilde_real
+      relevant_P <- P_tilde$P_real
     }
     
     regression_costs <- relevant_P %>% 

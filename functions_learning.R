@@ -104,6 +104,25 @@ convert_to_real_costs <- function(average_global_costs_df, deflator){
   
 }
 
+calculate_P <- function(P_component){
+  
+  # calculate weighted average global cost converted to lead currency l in year t
+  
+  P_comp_sum <- P_component %>% 
+    mutate(real_costs = nominal_costs / defl) %>% 
+    group_by(year, lead_currency) %>% 
+    summarise(P_nominal = sum(nominal_costs), P_real = sum(real_costs))
+  
+  P_nominal <- select(P_comp_sum, currency = lead_currency, year, costs = P_nominal)
+  P_real <- select(P_comp_sum, currency = lead_currency, year, costs = P_real)
+  
+  list(
+    "P_nominal" = P_nominal,
+    "P_real" = P_real
+  )
+  
+}
+
 get_exchange_rate_for_project <- function(project_date, project_currency) {
   
   # exchange_rates is global
