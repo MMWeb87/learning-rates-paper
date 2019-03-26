@@ -14,12 +14,12 @@ output:
     toc_depth: 2
 params:
   capacity_threshold: 5
-  delta: BNEF
-  x_global_for_cumsum: BNEF with date
+  delta: IRENA
+  x_global_for_cumsum: IRENA
   X_norm: no
   X_norm_capacity: 500
   X_norm_year: 2006
-  lead_currency: CNY
+  lead_currency: USD
   always_use_yearly_er: yes
   exchange_rate_norm_year: 2010
   default_digits: 2
@@ -960,6 +960,37 @@ combined_plot_data %>%
     scale_fill_manual(values = c(mypal,"#000000")) +
     labs(x = "", y = paste0("Learning rate")) +
     guides(fill=guide_legend(title="Currency"))    
+
+
+```
+
+```{r Save results}
+
+r1 <- results$simple_learning_rates %>% 
+  gather(starts_with('2'), key = interval, value = rate) 
+
+r2 <- results$simple_learning_rates_rsquared %>% 
+  gather(starts_with('2'), key = interval, value = rsquared)
+
+lr_result_1 <- left_join(r1, r2, by = c("currency", "interval")) %>% 
+    add_column(type = "uncorrected")
+
+
+r1 <- results$corrected_learning_rates %>%
+  filter(type == "adjusted") %>% 
+  select(-type) %>% 
+  gather(starts_with('2'), key = interval, value = rate) 
+
+r2 <- results$corrected_learning_rates_rsquared %>%
+  filter(type == "adjusted") %>% 
+  select(-type) %>% 
+  gather(starts_with('2'), key = interval, value = rsquared)
+
+lr_result_2 <- left_join(r1, r2, by = c("interval")) %>% 
+    add_column(type = "corrected", currency = params$lead_currency)
+  
+bind_rows(lr_result_1,lr_result_2) %>% 
+  write_csv(paste0("output/learning_rate_results_",params$delta,"_",params$lead_currency,".csv"))
 
 
 ```
