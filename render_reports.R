@@ -9,7 +9,7 @@ report_currency <- "USD"
 # The capacity in 2006 is not changed.
 
 rmarkdown::render("analysis_learningrates_corrections.Rmd", output_format = "word_document", 
-                  output_file = paste0(filename, "_IRENA_", report_currency, ".docx"), output_dir = "output", 
+                  output_file = paste0(filename, "_IRENA_", report_currency, ".docx"), output_dir = "output2", 
                   params = list(
                     delta = "IRENA",
                     x_global_for_cumsum = "IRENA",
@@ -60,7 +60,7 @@ filename <- paste("analysis_PV",Sys.Date(),sep = "_")
 for(report_currency in report_currencies){
   
   rmarkdown::render("analysis_learningrates_corrections.Rmd", output_format = "word_document", 
-                    output_file = paste0(filename, "_IRENA_", report_currency, ".docx"), output_dir = "output/currency_comparison", 
+                    output_file = paste0(filename, "_IRENA_", report_currency, ".docx"), output_dir = "output/currency_comparison4", 
                     params = list(
                       delta = "IRENA",
                       x_global_for_cumsum = "IRENA",
