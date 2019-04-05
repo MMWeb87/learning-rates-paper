@@ -23,7 +23,7 @@ params:
   always_use_yearly_er: yes
   exchange_rate_norm_year: 2010
   default_digits: 2
-  debug: yes
+  debug: no
   use_kable: no
 subtitle: Sourcefile and calculations
 bibliography: bib_lc.bib
