@@ -23,7 +23,7 @@ params:
   always_use_yearly_er: yes
   exchange_rate_norm_year: 2010
   default_digits: 2
-  debug: no
+  debug: yes
   use_kable: no
 subtitle: Sourcefile and calculations
 bibliography: bib_lc.bib
@@ -47,8 +47,7 @@ theme_set(theme_bw(base_size = 9.5) + theme(legend.title=element_blank()))
 ```{r parameters}
 
 # to accept these relevant currencies, they need to be in the currency_translation table
-relevant_currencies <- c("CNY","EUR","GBP","INR","JPY","USD")
-
+source("init.R")
 table_order_currency <- c("USD", "EUR", "JPY", "CNY", "INR", "GBP")
 
 plot_order_currency <- relevant_currencies
@@ -426,39 +425,51 @@ Exchange rates are from OFX and OECD, and the defaltors are based on OECD Consum
 
 ```{r load exchange rates}
 
-exchange_rates_USD <- read_csv(filenames[["exchange_rates"]], col_types = cols(
+exchange_rates_USD_per_month <- read_csv(filenames[["exchange_rates"]], col_types = cols(
     date = col_date(format = "%d.%m.%y"))) %>% 
   drop_na() %>% 
   add_column(USD = 1) %>% 
   select(date, !!relevant_currencies)
 
-exchange_rates_in_lead_currency <- exchange_rates_USD  
+# first take the average to avoid any comma errors
+
+exchange_rates_USD_yearly_average <- exchange_rates_USD_per_month %>% 
+  gather(-date, key = "currency", value = "er") %>% 
+  mutate(year = year(date)) %>% 
+  group_by(year, currency) %>% 
+  summarise(average_er = mean(er)) %>% ungroup() %>% 
+  spread(key = currency, value = average_er)
+
+#exchange_rates_in_lead_currency <- exchange_rates_USD
+exchange_rates_in_lead_currency_per_year <- exchange_rates_USD_yearly_average  
+exchange_rates_in_lead_currency_per_month <- exchange_rates_USD_per_month  
+
+
 
 if(lead_currency != "USD"){
 
-  for(other_currencies in relevant_currencies){
-    # c_curr/c_lead = c_curr/USD (column c_curr in relevant_exchange_rates) * (c_lead/USD)^-1 (column c_lead in relevant_exchange_rates)
-  exchange_rates_in_lead_currency[other_currencies] <- exchange_rates_USD[other_currencies] * as_tibble(exchange_rates_USD[lead_currency]^(-1))
-
+  for(other_currency in relevant_currencies){
+  
+  exchange_rates_in_lead_currency_per_year[other_currency] <- convert_exchange_rate(exchange_rates_USD_yearly_average, lead_currency, other_currency)
+  exchange_rates_in_lead_currency_per_month[other_currency] <- convert_exchange_rate(exchange_rates_USD_per_month, lead_currency, other_currency)
+    
   }
 }
 
-rm(other_currencies)
-
 # Select the lead currencies exchange rate
-exchange_rates_in_lead_currency <- exchange_rates_in_lead_currency %>% 
+exchange_rates_per_year <- exchange_rates_in_lead_currency_per_year %>% 
   gather(one_of(relevant_currencies), key = "currency", value = "rate") %>% 
-  mutate(month = month(date), year = year(date)) %>% 
-  select(date, year, month, everything())
-
-exchange_rates_averages <- exchange_rates_in_lead_currency %>% 
-  group_by(year, currency) %>% 
-  summarise(rate = mean(rate)) %>% ungroup() %>% 
+  select(year, everything()) %>% 
   add_column(lead_currency = lead_currency)
 
-# In case I want to change how the yearly exchange rate is calculated
-exchange_rates_per_year <- exchange_rates_averages
-exchange_rates_per_month <- exchange_rates_in_lead_currency
+exchange_rates_per_month <- exchange_rates_in_lead_currency_per_month %>% 
+  gather(one_of(relevant_currencies), key = "currency", value = "rate") %>%
+  mutate(year = year(date), month = month(date)) %>% 
+  select(year, month, date, everything()) %>% 
+  add_column(lead_currency = lead_currency)
+
+write_debug_information(exchange_rates_per_year, "exchange_rates_per_year")
+
 
 ```
 
@@ -686,6 +697,14 @@ for(j in seq_along(relevant_currencies)){
     
     l <- calculate_learning_rate(regression_costs, regression_cumulative_capacity)
     
+    debug_prefix <- paste0(interval_name, "_", "simple","_")
+
+    write_debug_information(tibble(
+        costs = regression_costs, 
+        capacity = regression_cumulative_capacity,
+        currency = currency), 
+      paste0(debug_prefix, "regression_costs_",currency))
+    
     simple_learning_rates_matrix[j,i] <- l$learning_rate
     simple_learning_rates_rsquared_matrix[j,i] <- l$rsquared
   }
@@ -832,19 +851,20 @@ for(t in all_years){
     
     P_comp[P_comp$year == t & P_comp$currency == i, "nominal_costs"] <- delta_i_t * w_i_t * C_i_t
     P_comp_tilde[P_comp$year == t & P_comp$currency == i, "nominal_costs"] <- delta_i_t * w_i_0 * C_i_t
-    
 
   }
   
 }
 
-# debug
+# for debugging
 alpha <- P_comp_tilde %>% 
   left_join(P_comp, by = c("currency", "year"), suffix = c("_tilde", "")) %>% 
   mutate(alpha = nominal_costs_tilde / nominal_costs) %>% 
-  write_csv(paste0("output/currency_comparison2/alpha_", params$lead_currency,".csv"))
+  write_debug_information("alphas")
 
-  
+write_debug_information(P_comp, paste0("P_comp_nominal"))
+
+
 P <- calculate_P(P_comp)
 P_tilde <- calculate_P(P_comp_tilde)
 
@@ -876,26 +896,31 @@ for(type in types){
     interval_name <- names(intervals[i])
     
     if(type == "unadjusted"){
-      relevant_P <- P$P_nominal
+      relevant_P <- P$P_real
     } else {
-      relevant_P <- P_tilde$P_nominal
+      relevant_P <- P_tilde$P_real
     }
     
     regression_costs <- relevant_P %>% 
       filter(year %in% interval_years) %>% 
-      mutate(costs2 = costs / as.double(relevant_P[relevant_P$year==2006,"costs"])) %>% 
-      pull(costs2)
+      pull(costs)
     
     regression_cumulative_capacity <- X %>% 
       filter(year %in% interval_years) %>% 
       pull(X)
     
-    print(regression_costs)
-    print(regression_cumulative_capacity)
-    
     l <- calculate_learning_rate(regression_costs, regression_cumulative_capacity)
+    l_lin <- calculate_learning_rate(regression_costs, regression_cumulative_capacity, transformation = "none")
     
-    print(l$b1)
+    debug_prefix <- paste0(interval_name, "_", type,"_")
+    
+    write_debug_information(tibble(
+      costs = regression_costs, 
+      capacity = regression_cumulative_capacity), paste0(debug_prefix, "regression_costs"))
+
+    write_debug_information(l$b1, paste0(debug_prefix, "coefficient_log"))
+    write_debug_information(l_lin$b1, paste0(debug_prefix, "coefficient_lin"))
+
     
     corrected_learning_rates_list[[type]][[interval_name]] <- l$learning_rate
     corrected_learning_rates_rsquared_list[[type]][[interval_name]] <- l$rsquared
@@ -1010,7 +1035,7 @@ lr_result_2 <- left_join(r1, r2, by = c("interval")) %>%
     add_column(type = "corrected", currency = params$lead_currency)
   
 bind_rows(lr_result_1,lr_result_2) %>% 
-  write_csv(paste0("output/learning_rate_results_",params$delta,"_",params$lead_currency,".csv"))
+  write_csv(paste0("output/results/learning_rate_results_",params$delta,"_",params$lead_currency,".csv"))
 
 
 ```

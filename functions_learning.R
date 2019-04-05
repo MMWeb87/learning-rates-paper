@@ -4,31 +4,22 @@
 # Calculation functions ---------------------------------------------------
 
 
-#' Calculation of learning rate. Doubling 
+#' Calculation of the learning rate
 #'
 #' @param costs The technology costs. Usually yearly means 
 #' @param cumulative_capacity  Cumulative capacity. Need to be same length as costs
 #' @param digits Rounding precision
 #'
 #' @return Learning rate
-#' @export
-#'
-#' @examples 
+#' 
 calculate_learning_rate <- function(costs, cumulative_capacity, digits = 10){
-  
-  if(params$debug){
-    print(costs)
-    print(cumulative_capacity)
-  }
-  
-  fit.lm.log <- lm(log(costs) ~ log(cumulative_capacity))
-  #fit.lm.log <- lm(costs ~ cumulative_capacity)
-  
-  
+
+  fit.lm.log <- lm(log(costs) ~ log(cumulative_capacity))  
+
   # Extract learning rate from coefficient b1
-  b1 <- coef(fit.lm.log)[2] 
-  
-  # b1 = delta/r; r = assuming constant returns-to-scale parameter = 1. delta_L is the so-called learning-by-doing elasticity, indicating the percentage change in cost following a one percentage increase in cumulative capacity.
+  # b1 = delta/r; r = assuming constant returns-to-scale parameter = 1. 
+  # delta_L is the so-called learning-by-doing elasticity, indicating the percentage change in cost following a one percentage increase in cumulative capacity.
+  b1 <- coef(fit.lm.log)[2]
   
   delta_L <- b1
   learning_rate <- 1 - 2 ^ delta_L # Percentage decrease in wind power cost for each doubling of cumulative capacity.
@@ -46,16 +37,11 @@ calculate_learning_rate <- function(costs, cumulative_capacity, digits = 10){
 }
 
 
-
-
-#' calculate_cummulative_sums
+#' Calculate_cummulative_sums
+#' 
 #' Calculates the deployment of capacity per year
 #' @param projects_data A dataframe including the variable year and capacity
 #'
-#' @return
-#' @export
-#'
-#' @examples
 calculate_cummulative_sums <- function(projects_data){
   projects_data %>% 
     group_by(year, subset_name) %>% 
@@ -111,6 +97,9 @@ calculate_P <- function(P_component){
   
   # calculate weighted average global cost converted to lead currency l in year t
   
+  
+    
+  
   P_comp_sum <- P_component %>% 
     mutate(real_costs = nominal_costs / defl) %>% 
     group_by(year, lead_currency) %>% 
@@ -145,6 +134,27 @@ get_exchange_rate_for_project <- function(project_date, project_currency) {
     er <- as.double(exchange_rates[er_date,currency])
   }
   return(er)
+}
+
+
+#' Exchange rate convertsion
+#' 
+#' Converts form exchange rates for a reference currency (e.g. USD), to the exchange rates between two other currencies
+#'
+#' @param exchange_rates a dataframe with exchange rates of a lead currency to other currencies 
+#' @param other_currency_to_ref_currency_er name of the other currency (same as in dataframe) 
+#' @param lead_currency_to_ref_currency_er name of the lead currency (same as in dataframe) 
+#'
+#' @return
+#' @export
+#'
+#' @examples
+convert_exchange_rate <- function(exchange_rates_data, lead_currency, other_currency){
+  
+  # the formula is c_other_curreny/c_lead_currency = c_other_currency/USD * (c_lead_currency/USD)^-1
+  exchange_rates_data[other_currency] * as_tibble(exchange_rates_data[lead_currency]^(-1))
+  
+  
 }
 
 
@@ -333,6 +343,26 @@ matrix_to_tibble <- function(matrix, colnames, groups, group_name){
 # turns a nested list of lists into a matrix with as many rows as objects in the first level are
 nested_list_to_matrix <- function(list){
   matrix(unlist(list), nrow = length(list), byrow = TRUE)
+}
+
+
+# Debug ------------------------------------------------------------------
+
+write_debug_information <- function(data, title){
+  
+
+  if(params$debug){
+    data <- as_tibble(data)
+    
+    directory <- paste0("output/debug/", params$lead_currency, "/")
+    filename <- paste0(title, ".csv")
+    
+    dir.create(directory)
+    
+    write_csv(data, paste0(directory,filename))
+  }
+  
+
 }
 
 
