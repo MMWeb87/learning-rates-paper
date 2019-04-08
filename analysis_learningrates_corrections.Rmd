@@ -616,6 +616,13 @@ print_learning_rates_result(
 
 ```
 
+
+```{r Combined plot of learning curves, fig.cap="Combined plot of the currency-corrected learning curve in 3 intervals", fig.width=fig.width.baseline * 0.8, fig.asp=0.6}
+
+
+ 
+```
+
 \clearpage
 
 

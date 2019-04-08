@@ -20,7 +20,7 @@ relevant_deflators <- c("CHN", "EA19", "GBR", "IND", "JPN", "USA")
 
 intervals <- list(
   c(2006,2011),
-  c(2012,2016),
+  c(2011,2016),
   c(2006,2016)
 )
 

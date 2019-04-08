@@ -252,7 +252,7 @@ print_learning_rates_result <- function(learning_rates, rsquared, group, label){
   full_join(
       learning_rates, rsquared, 
       by = group,  suffix = c("", ".R2")) %>% 
-    select(!!group, contains("2006-2011"), contains("2012-2016"), contains("2006-2016")) %>% 
+    select(!!group, everything()) %>% 
     print_number_table(label)
   
 }
