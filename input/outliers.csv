@@ -1,4 +1,4 @@
-﻿Projectid,Description
+Projectid,Description
 28442,The subprojects of this project is listed multiple times. It seems that most project costs are allocated to the other part of the project.
 31373,The load description deviated considerably from the cost given for this project
 139287,Investment costs are 10 times higher than those of all other projects which can not be explained. We assume a mistake in the order of magnitude either of the costs or the projects size.
@@ -8,3 +8,5 @@
 49744,Wrong currency -> actually THB not Japanese Yen
 49750,Wrong currency -> actually THB not Japanese Yen
 49752,Wrong currency -> actually THB not Japanese Yen
+28605,Unknown currency
+72760,Unknown currency

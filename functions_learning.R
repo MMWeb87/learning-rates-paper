@@ -97,9 +97,6 @@ calculate_P <- function(P_component){
   
   # calculate weighted average global cost converted to lead currency l in year t
   
-  
-    
-  
   P_comp_sum <- P_component %>% 
     mutate(real_costs = nominal_costs / defl) %>% 
     group_by(year, lead_currency) %>% 
@@ -115,25 +112,12 @@ calculate_P <- function(P_component){
   
 }
 
-get_exchange_rate_for_project <- function(project_date, project_currency) {
+get_exchange_rate_for_project <- function(exchange_rate_data, project_year, project_currency) {
   
-  # exchange_rates is global
-
-  if(params$always_use_yearly_er){
-    er <- exchange_rates_per_year %>% 
-      filter(year == year(project_date), currency == project_currency) %>% 
-      pull(rate)
+  exchange_rate_data %>% 
+    filter(year == project_year, currency == project_currency) %>% 
+    pull(rate)
     
-    
-  } else {
-    # finds the closest date in exchange_rates$date vector and returns
-    ## TODO: fix this function
-    
-    day_differences <- abs(exchange_rates_per_year$date - project_date)
-    er_date <- which(abs(day_differences) == min(day_differences, na.rm = TRUE))[1] 
-    er <- as.double(exchange_rates[er_date,currency])
-  }
-  return(er)
 }
 
 

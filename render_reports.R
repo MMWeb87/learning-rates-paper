@@ -9,11 +9,8 @@ for(report_currency in report_currencies){
   rmarkdown::render("analysis_learningrates_corrections.Rmd", output_format = "word_document", 
                     output_file = paste0(filename, "_IRENA_", report_currency, ".docx"), output_dir = "output/reports/", 
                     params = list(
-                      delta = "IRENA",
-                      x_global_for_cumsum = "IRENA",
                       lead_currency = report_currency,
-                      use_kable = TRUE, 
-                      X_norm = FALSE))
+                      use_kable = TRUE))
 
 }
 
