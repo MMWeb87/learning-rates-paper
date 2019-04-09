@@ -17,7 +17,7 @@ params:
   capacity_data: IRENA
   capacity_threshold: 5
   lead_currency: USD
-  exchange_rate_norm_year: 2010
+  exchange_rate_norm_year: 2006
   default_digits: 2
   debug: no
   use_kable: no
@@ -616,13 +616,29 @@ print_learning_rates_result(
 
 ```
 
+### Combined plot
 
-```{r Combined plot of learning curves, fig.cap="Combined plot of the currency-corrected learning curve in 3 intervals", fig.width=fig.width.baseline * 0.8, fig.asp=0.6}
+To plot all learning rates in the same plot, it is necessary to norm the costs. To do this, we select the initial year's average global costs and divide all average global costs by that value. We then get 1/W for all average costs and can compare the learning rates.
+
+```{r Combined and normed plot, echo=FALSE, fig.asp=0.6, fig.cap="Comparison of learning rates, as index of the average costs in 2006", fig.width=fig.width.baseline * 0.8}
+
+combined_plot_data <- average_global_costs_real %>% 
+  inner_join(X) %>% 
+  filter(year >= T0, year <= T_max) %>% 
+  select(
+    year, 
+    average_costs = real_costs, 
+    currency, 
+    cumulative_capacity = X) %>% 
+  mutate(currency = factor(currency, plot_order_currency))
+
+combined_plot_data %>% 
+  norm_average_costs() %>% 
+  mutate(year_for_text = if_else(currency == "GBP", as.character(year), "")) %>% 
+  get_normed_plots(intervals)
 
 
- 
 ```
-
 \clearpage
 
 
@@ -858,6 +874,7 @@ ggplot(data_for_plots, aes(capacity/1000, costs)) +
  
 ```
 
+
 ## Combined plot of simple and corrected learning rates
 
 Comparison with the simple learning rates for every country
@@ -919,5 +936,4 @@ bind_rows(lr_result_1,lr_result_2) %>%
 
 
 ```
-
 

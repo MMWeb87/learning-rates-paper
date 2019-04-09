@@ -146,6 +146,49 @@ convert_exchange_rate <- function(exchange_rates_data, lead_currency, other_curr
 # Plot functions -----------------------------------------------------------
 
 
+#' Get normed plot
+#' Produces the learning rate plots. In
+#'
+#' @param normed_plot_data Normed plot data, having the field year_for_text
+#' @param intervals 
+#'
+#' @return
+#' @export
+#'
+#' @examples
+get_normed_plots <- function(normed_plot_data, intervals){
+  
+  plots <- list()
+  
+  for(i in seq_along(intervals)){
+    interval <- intervals[[i]]
+    interval_name <- names(intervals[i])
+    interval_years <- as.numeric(interval[1]):as.numeric(interval[2])
+    
+    plots[[interval_name]] <- normed_plot_data %>% 
+      filter(year %in% interval_years) %>% 
+      ggplot(aes(cumulative_capacity/1000, normed_average_costs)) +
+        geom_smooth(
+          aes(col = currency),
+          method="lm", formula = (y ~ x), se=FALSE) +
+        geom_point(aes(col = currency)) +
+        geom_text(aes(label = year_for_text), vjust = -0.6, hjust = 0.1, size = 3) +
+        scale_x_continuous(trans="log", breaks = c(c(1,seq(2,10,2)) %o% 10^(0:4)), minor_breaks = 0.5) +
+        scale_y_continuous(trans="log", breaks = seq(0,2,0.1), minor_breaks = NULL) +
+        guides(
+          linetype = guide_legend(title="Learning rate"), 
+          col = guide_legend(title="Learning rate"), 
+          size = guide_legend(title="Type")) +
+        labs(x = "Cumulative capacity [GW]", 
+             y = paste0("Index of average yearly costs (2017) costs per MW"),
+             subtitle = interval_name) +
+        scale_color_npg()
+  }
+  
+  return(plots)
+  
+}
+
 get_delta_plot <- function(delta_data, plot_type = "combined", legend = FALSE){
   
   delta_plot1 <- ggplot(data = delta_data, 
@@ -327,6 +370,24 @@ matrix_to_tibble <- function(matrix, colnames, groups, group_name){
 # turns a nested list of lists into a matrix with as many rows as objects in the first level are
 nested_list_to_matrix <- function(list){
   matrix(unlist(list), nrow = length(list), byrow = TRUE)
+}
+
+#' Norm average cost
+#' Used to produce the nomred plots
+#'
+#' @param costs_and_capacity dataframe including currency, average costs and capacity fields
+norm_average_costs <- function(costs_and_capacity){
+  
+  combined_plot_norm_data <- costs_and_capacity %>% 
+    filter(year == T0) %>% 
+    select(norm_costs = average_costs, currency)
+  
+  combined_plot_data %>% 
+    inner_join(combined_plot_norm_data, by = "currency") %>% 
+    mutate(normed_average_costs = average_costs / norm_costs) %>% 
+    arrange(currency, year)
+  
+  
 }
 
 
