@@ -418,8 +418,6 @@ exchange_rates_plot <- ggplot(exchange_rates_index, aes(x = date, y = normed_rat
        y = paste("Index of", lead_currency ,"exchange rate (Jan 2006)")) +
   theme(axis.text.x = element_text(angle = 90, hjust = 1,vjust = 0.5 ))
 
-exchange_rates_plot
-
 ```
 
 
@@ -903,26 +901,6 @@ print_learning_rates_result(
   "type", paste("Global learning rates in lead currency", lead_currency))
 
 ```
-
-
-```{r Plot of learning curves, fig.cap="Plot of the currency-corrected learning curve in 3 intervals", fig.width=fig.width.baseline * 0.8, fig.asp=0.6}
-
-data_for_plots <- do.call("rbind", corrected_learning_rates_data_list$adjusted)
-
-ggplot(data_for_plots, aes(capacity/1000, costs)) +
-  geom_smooth(mapping = aes(col = interval, linetype = interval), method="lm", formula = (y ~ x), se=FALSE) +
-  geom_point(data=. %>% filter(interval==combined_plot_interval), col = "black") +
-  geom_text(data=. %>% filter(interval==combined_plot_interval), col = "black", aes(label=years), hjust=1.3, vjust=1, size=2.5, alpha = 0.8) +
-  scale_x_continuous(trans="log", breaks = c(c(1,seq(0,10,2)) %o% 10^(0:4)), minor_breaks = seq(0,1,by = 0.5)) +
-  scale_y_continuous(trans="log", breaks = c(2:10 %o% 10^(0:4))) +
-  labs(x = "Cumulative capacity [GW]", 
-       y = paste0("Weighted average costs [2017-", lead_currency, " / W]")) +
-  guides(colour=guide_legend(title="Interval"),linetype=guide_legend(title="Interval")) +
-  theme(
-    axis.text.x = element_text(angle = 90, hjust = 1))
- 
-```
-
 
 ## Combined plot of simple and corrected learning rates
 
