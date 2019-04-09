@@ -174,13 +174,13 @@ get_normed_plots <- function(normed_plot_data, intervals){
         geom_point(aes(col = currency)) +
         geom_text(aes(label = year_for_text), vjust = -0.6, hjust = 0.1, size = 3) +
         scale_x_continuous(trans="log", breaks = c(c(1,seq(2,10,2)) %o% 10^(0:4)), minor_breaks = 0.5) +
-        scale_y_continuous(trans="log", breaks = seq(0,2,0.1), minor_breaks = NULL) +
+        scale_y_continuous(trans="log", breaks = c(seq(0,1,0.1), seq(1.2,2,0.2)), minor_breaks = NULL) +
         guides(
           linetype = guide_legend(title="Learning rate"), 
           col = guide_legend(title="Learning rate"), 
           size = guide_legend(title="Type")) +
         labs(x = "Cumulative capacity [GW]", 
-             y = paste0("Index of average yearly costs (2017) costs per MW"),
+             y = paste0("Index of costs per MW"),
              subtitle = interval_name) +
         scale_color_npg()
   }
@@ -197,7 +197,7 @@ get_delta_plot <- function(delta_data, plot_type = "combined", legend = FALSE){
     scale_x_continuous(breaks = seq(2004, 2017, 1), minor_breaks = NULL) +
     scale_fill_npg() +
     labs(x = "", 
-         y = paste0("Added renewable capacity [GW]")) +
+         y = paste0("Added PV capacity [GW]")) +
     guides(fill = guide_legend(title = "Currency area")) + 
     theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5 ))
   
@@ -207,7 +207,7 @@ get_delta_plot <- function(delta_data, plot_type = "combined", legend = FALSE){
     scale_x_continuous(breaks = seq(2004,2017,1), minor_breaks = NULL) +
     scale_fill_npg() +
     labs(x = "", 
-         y = paste0("Global share of added renewable capacity")) +
+         y = paste0("Share of added PV capacity")) +
     guides(fill=guide_legend(title="Currency area")) +
     theme(axis.text.x = element_text(angle = 90, hjust = 1,vjust = 0.5), 
           legend.position = if_else(legend, "right", "none"))

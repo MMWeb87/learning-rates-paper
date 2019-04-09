@@ -7,11 +7,15 @@ for(report_currency in report_currencies){
   # The capacity in 2006 is not changed.
   
   rmarkdown::render("analysis_learningrates_corrections.Rmd", output_format = "word_document", 
-                    output_file = paste0(filename, "_IRENA_", report_currency, ".docx"), output_dir = "output/reports/", 
+                    output_file = paste0(filename, "", report_currency, ".docx"), output_dir = "output/reports/", 
                     params = list(
                       lead_currency = report_currency,
                       use_kable = TRUE))
-
+   
 }
 
+# files
+rmarkdown::render("analysis_learningrates_corrections.Rmd", output_format = "pdf_document", 
+                  output_file = paste0(filename, ".pdf"), output_dir = "output/reports_files/", 
+                  params = list(use_kable = TRUE))
 

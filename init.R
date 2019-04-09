@@ -34,6 +34,7 @@ plot_order_country <- c("China", "Euro Area", "United Kingdom", "India", "Japan"
 plot_order_linetype <- c("dotdash", "longdash", "dashed", "dotted", "twodash", "solid")
 
 fig.width.baseline <- 7
+output.size <- 1.4
 out.width.default <- "100%"
 
 combined_plot_interval <- "2006-2016"

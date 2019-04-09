@@ -30,6 +30,7 @@ library(ggsci)
 library(gridExtra)
 library(tidyverse)
 library(lubridate)
+library(cowplot)
 
 source("init.R")
 source("functions_learning.R")
@@ -44,7 +45,13 @@ lead_currency <- params$lead_currency
 # for report
 currencies_print <- paste(relevant_currencies, collapse=", ")
 
-knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+knitr::opts_chunk$set(
+  echo = FALSE, 
+  message = FALSE, 
+  warning = FALSE,
+  fig.width=fig.width.baseline*output.size, 
+  out.width=out.width.default)
+
 theme_set(theme_bw(base_size = 9.5) + theme(legend.title=element_blank()))
 
 ```
@@ -388,10 +395,10 @@ write_debug_information(exchange_rates_per_year, "exchange_rates_per_year")
 ```
 
 
-```{r exchange rate plot, echo=FALSE, fig.asp=0.6, fig.cap="Comparison of all different exchange rates", fig.width=fig.width.baseline * 0.8}
+```{r exchange rate plot, echo=FALSE, fig.asp=0.6, fig.cap="Development of exchange rates of the main markets for large-scale PV 2006-2016, indexed USD-XXX January 2006=1 ", fig.width=fig.width.baseline * 0.8}
 
-exchange_rates_norm <- exchange_rates_per_year %>% 
-  filter(year == params$exchange_rate_norm_year) %>% 
+exchange_rates_norm <- exchange_rates_per_month %>% 
+  filter(year == params$exchange_rate_norm_year, month == 1) %>% 
   rename(norm_rate = rate) %>% 
   select(currency, norm_rate)
 
@@ -402,17 +409,20 @@ exchange_rates_index <- exchange_rates_per_month %>%
 
 exchange_rates_index$currency <- factor(exchange_rates_index$currency, plot_order_currency)
 
-ggplot(exchange_rates_index, aes(x = date, y = normed_rate, col = currency, linetype = currency)) +
+exchange_rates_plot <- ggplot(exchange_rates_index, aes(x = date, y = normed_rate, col = currency, linetype = currency)) +
   geom_line() +
   scale_x_date(date_breaks = "1 year", date_labels = "%Y") +
   scale_linetype_manual(values=plot_order_linetype) +
   scale_color_npg() +
   labs(x = "", 
-       y = paste("Index of", lead_currency ," exchange rate"),
-      subtitle = paste("The data is an index of the avaerage exchange rate of", params$exchange_rate_norm_year)) +
+       y = paste("Index of", lead_currency ,"exchange rate (Jan 2006)")) +
   theme(axis.text.x = element_text(angle = 90, hjust = 1,vjust = 0.5 ))
 
+exchange_rates_plot
+
 ```
+
+
 
 ## Deflators
 
@@ -620,7 +630,7 @@ print_learning_rates_result(
 
 To plot all learning rates in the same plot, it is necessary to norm the costs. To do this, we select the initial year's average global costs and divide all average global costs by that value. We then get 1/W for all average costs and can compare the learning rates.
 
-```{r Combined and normed plot, echo=FALSE, fig.asp=0.6, fig.cap="Comparison of learning rates, as index of the average costs in 2006", fig.width=fig.width.baseline * 0.8}
+```{r Combined and normed plot, echo=FALSE, fig.cap="Comparison of learning rates, as index of the average costs in 2006", fig.width=fig.width.baseline*output.size, fig.asp=0.4, out.width=out.width.default}
 
 combined_plot_data <- average_global_costs_real %>% 
   inner_join(X) %>% 
@@ -632,10 +642,26 @@ combined_plot_data <- average_global_costs_real %>%
     cumulative_capacity = X) %>% 
   mutate(currency = factor(currency, plot_order_currency))
 
-combined_plot_data %>% 
+combined_plots <- combined_plot_data %>% 
   norm_average_costs() %>% 
   mutate(year_for_text = if_else(currency == "GBP", as.character(year), "")) %>% 
   get_normed_plots(intervals)
+
+
+combined_plots_legend <- combined_plots[[1]] +
+  theme(legend.position="bottom") +
+  guides(
+    col = guide_legend(nrow=1,byrow=TRUE),
+    linetype = guide_legend(nrow=1,byrow=TRUE))
+
+
+plot_grid(
+  plot_grid(combined_plots[[1]] + theme(legend.position = "none"), 
+                   combined_plots[[2]] + theme(legend.position = "none"), 
+                   combined_plots[[3]] + theme(legend.position = "none"), labels = c("a", "b", "c"), 
+                   rel_widths = c(1,1,1), align = "h", ncol = 3),
+  get_legend(combined_plots_legend), rel_heights = c(5,1),
+  ncol = 1)
 
 
 ```
@@ -668,7 +694,7 @@ if(params$capacity_data == "IRENA"){
 
 The market share of PV deplyoment in each currency and year is relevant. To calculate the market share of different currencies, we derive delta values from BNEF and IRENA datasets. Figure 1 visualises the market shares as a function of the currency.
 
-```{r Marketshare plots comparison, fig.width = 11, fig.cap = "Comparison of capacity additions per year and currency area in BNEF and IRENA dataset", fig.width=fig.width.baseline, fig.asp=0.45, out.width=out.width.default}
+```{r Marketshare plots comparison, fig.cap = "Comparison of capacity additions per year and currency area in BNEF and IRENA dataset", fig.width=fig.width.baseline, fig.asp=0.45, out.width=out.width.default}
 
 bind_rows(delta_BNEF,delta_IRENA) %>% 
   get_delta_plot(plot_type = "absolute") +
@@ -681,9 +707,32 @@ bind_rows(delta_BNEF,delta_IRENA) %>%
 
 ```
 
-```{r Marketshare plots current, fig.width = 11, fig.cap = "Capacity additions per year and currency area", fig.width=fig.width.baseline, fig.asp=0.45, out.width=out.width.default}
+```{r Marketshare plots current, fig.cap = "Capacity additions per year and currency area", fig.width=fig.width.baseline*output.size, fig.asp=0.8, out.width=out.width.default}
 
-get_delta_plot(delta)
+plot_marketshare_absolute <- get_delta_plot(delta, plot_type = "absolute")
+plot_marketshare_legend <- get_legend(plot_marketshare_absolute)
+plot_marketshare_absolute <- plot_marketshare_absolute + theme(legend.position = "none")
+
+plot_marketshare_relative <-  get_delta_plot(delta, plot_type = "relative") + theme(legend.position = "none")
+
+plot_marketshare_top_row <- plot_grid(
+  plot_marketshare_absolute,
+  plot_marketshare_relative,
+  plot_marketshare_legend,
+  labels = c("a", "b", ""), 
+  rel_widths = c(1,1,0.4), align = "h", ncol = 3)
+
+
+exchange_rates_plot_legend <- get_legend(exchange_rates_plot)
+exchange_rates_plot_nolegend <- exchange_rates_plot + theme(legend.position = "none")
+
+exchange_rates_plot_aligned <- align_plots(plot_marketshare_absolute, exchange_rates_plot_nolegend, align = 'v', axis = 'l')[[2]] 
+
+
+plot_marketshare_bottom_row <- plot_grid(exchange_rates_plot_aligned, exchange_rates_plot_legend, labels = c('c', ''), rel_widths = c(2,0.4), align = "h", ncol = 2)
+
+plot_grid(plot_marketshare_top_row, plot_marketshare_bottom_row, labels = c('', 'c'), ncol = 1, rel_heights = c(1, 1.2))
+
 
 ```
 
@@ -879,29 +928,83 @@ ggplot(data_for_plots, aes(capacity/1000, costs)) +
 
 Comparison with the simple learning rates for every country
 
-```{r Combined plot, fig.cap="Learning rates plot", fig.width=fig.width.baseline * 0.8, fig.asp=0.6}
-
-combined_plot_data <- bind_rows(
-    add_column(results$simple_learning_rates, type = "uncorrected"),
-    add_column(results$corrected_learning_rates, currency = "USD")) %>% 
-  filter(type != "unadjusted") %>%
-  gather(key = "interval", value = "lr", contains("-")) %>% 
-  mutate(
-    type = fct_recode(type, "corrected" = "adjusted"),
-    interval = fct_relevel(interval, names(intervals)), 
-    legend = ifelse(type == "corrected", paste0(currency, " (", type, ")"), currency),
-    legend = fct_relevel(legend, "USD (corrected)", after = Inf))
-
-
+```{r Combined plot, fig.cap="Learning rates plot", fig.asp=0.4}
 
 mypal = pal_npg("nrc")(length(relevant_currencies))
 
-combined_plot_data %>% 
-  ggplot(aes(fill = legend, y = lr, x = interval)) + 
-    geom_bar(position="dodge", stat="identity") +
-    scale_fill_manual(values = c(mypal,"#000000")) +
-    labs(x = "", y = paste0("Learning rate")) +
-    guides(fill=guide_legend(title="Currency"))    
+corrected_rates <- results$corrected_learning_rates %>% 
+  filter(type == "adjusted") %>%
+  gather(key = "interval", value = "corrected_lr", contains("-")) %>%
+  select(corrected_lr, interval)
+
+combined_plot_data <- bind_rows(
+    results$corrected_learning_rates %>% 
+      filter(type == "adjusted") %>% 
+      add_column(currency = "fx-corrected"),
+    results$simple_learning_rates %>% 
+      add_column(type = "uncorrected")
+    ) %>% 
+  add_row(currency = "", type = "placeholder", .after = 1) %>% 
+  gather(key = "interval", value = "lr", contains("-")) %>% 
+  left_join(corrected_rates, by = c("interval")) %>% 
+  mutate(
+    lr = round(replace_na(lr, replace = 0),digits = 1),
+    diff = round(lr - corrected_lr, digits = 1),
+    diff_text = paste0(if_else(diff > 0, "+", ""), diff),
+    interval = fct_relevel(interval, names(intervals)),
+    currency = fct_relevel(currency, "fx-corrected", after = 0)) 
+
+library(ggrepel)
+
+plots <- list()
+
+for(i in seq_along(intervals)){
+  
+  interval <- intervals[[i]]
+  interval_name <- names(intervals[i])
+  interval_years <- as.numeric(interval[1]):as.numeric(interval[2])
+
+
+  corrected_rate <- corrected_rates %>% 
+    filter(interval == interval_name) %>% 
+    pull(corrected_lr)
+  
+  
+  plots[[interval_name]] <- combined_plot_data %>% 
+    filter(interval == interval_name) %>% 
+    ggplot(aes(fill = currency, y = lr, x = currency)) + 
+      geom_bar(position="dodge", stat="identity") +
+      geom_hline(yintercept = corrected_rate) + 
+      geom_segment(. %>% filter(currency %in% relevant_currencies), mapping=aes(x = currency, xend=currency, y = corrected_lr, yend=lr), 
+                   arrow = arrow(length = unit(0.05, "inches"), type = "closed"), 
+                   size = 1, color="black") +
+      geom_text(. %>% filter(currency != ""), mapping = aes(y = lr/2, label = lr), col = "white", size = 3) + # learning rates
+      geom_label_repel(. %>% filter(currency %in% relevant_currencies), mapping = aes(label = diff_text), nudge_y = 2, fill = "white", size = 3) + # differences
+      scale_fill_manual(values = c("#000000", "white", mypal)) +
+      scale_y_continuous(limits = c(0,40), expand = expand_scale(mult = c(0, 0.1))) +
+      labs(
+        subtitle = interval_name, y = paste0("Learning rate in %")) +
+      theme(
+        axis.title.x = element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(), 
+        panel.grid.major = element_blank())
+}
+
+# TODO: integrate in get_legend function
+plot_legend <- plots[[1]] +
+  theme(legend.position="bottom") +
+  guides(
+    fill = guide_legend(nrow=1,byrow=TRUE))
+
+
+plot_grid(
+  plot_grid(plots[[1]] + theme(legend.position = "none"), 
+                   plots[[2]] + theme(legend.position = "none"), 
+                   plots[[3]] + theme(legend.position = "none"), labels = c("a", "b", "c"), 
+                   rel_widths = c(1,1,1), align = "h", ncol = 3),
+  get_legend(plot_legend), rel_heights = c(5,1),
+  ncol = 1)
 
 
 ```
