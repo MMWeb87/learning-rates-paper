@@ -19,7 +19,7 @@ params:
   lead_currency: USD
   exchange_rate_norm_year: 2006
   default_digits: 2
-  debug: no
+  debug: yes
   use_kable: no
 ---
 
@@ -31,6 +31,8 @@ library(gridExtra)
 library(tidyverse)
 library(lubridate)
 library(cowplot)
+library(ggrepel)
+
 
 source("init.R")
 source("functions_learning.R")
@@ -757,8 +759,8 @@ The table shows which currency have average_local_costs in which year.
 
 In the third step, we aggregate the data by yearly averages for each currency. The mean is weighted by the marketshare $\delta$ (in contrast to method 1). We calculate two different $P$: 
 
-- $P$ for the unadjusted average global costs
-- $P_{tilde}$ for the adjusted average global costs
+- $P$ for the uncorrected-weighted average global costs
+- $P_{tilde}$ for the corrected average global costs
 
 ```{r Calculation of the weighted average global cost P}
 
@@ -795,8 +797,8 @@ for(t in all_years){
     C_i_t <- filter(C, year == t, currency == i) %>% pull(C)
     
     P_comp[P_comp$year == t & P_comp$currency == i, "nominal_costs"] <- delta_i_t * w_i_t * C_i_t
-    P_comp_tilde[P_comp$year == t & P_comp$currency == i, "nominal_costs"] <- delta_i_t * w_i_0 * C_i_t
-
+    P_comp_tilde[P_comp$year == t & P_comp$currency == i, "nominal_costs"] <- delta_i_t * w_i_0 * C_i_
+    
   }
   
 }
@@ -818,15 +820,15 @@ P_tilde <- calculate_P(P_comp_tilde)
 
 ### Step 5: Calculation of the learning rate
 
-A regression over $P_{t,2017}^l$ gives us the **un**adjusted global learning rates in `r lead_currency`,. The **un**adjusted rate includes both technological learning and changes in exchange rates. Therefore, it is different in different lead currencies. To get the same number in every lead currency (i.e. a truly global learning rate), we adjust the unadjusted global learning rate for the currency effect. Applying $\alpha$ to the learning rate calculation results in the adjusted global learning rate. The adjusted rate only includes technological learning.
+A regression over $P_{t,2017}^l$ gives us the **un**corrected global learning rates in `r lead_currency`,. The **un**corrected rate includes both technological learning and changes in exchange rates. Therefore, it is different in different lead currencies. To get the same number in every lead currency (i.e. a truly global learning rate), we adjust the uncorrected-weighted global learning rate for the currency effect. Applying $\alpha$ to the learning rate calculation results in the corrected global learning rate. The corrected rate only includes technological learning.
 
-```{r Calculation of unadjusted and adjusted learning rate}
+```{r Calculation of uncorrected-weighted and corrected learning rate}
 
 corrected_learning_rates_list <- list()
 corrected_learning_rates_data_list <- list()
 corrected_learning_rates_rsquared_list <- list()
 
-types <- c("unadjusted","adjusted")
+types <- c("uncorrected-weighted","corrected")
 
 for(type in types){
   corrected_learning_rates_list[[type]] <- list()
@@ -839,7 +841,7 @@ for(type in types){
     interval_years <- as.numeric(interval[1]):as.numeric(interval[2])
     interval_name <- names(intervals[i])
     
-    if(type == "unadjusted"){
+    if(type == "uncorrected-weighted"){
       relevant_P <- P$P_real
     } else {
       relevant_P <- P_tilde$P_real
@@ -862,9 +864,7 @@ for(type in types){
       capacity = regression_cumulative_capacity), paste0(debug_prefix, "regression_costs"))
 
     write_debug_information(l$b1, paste0(debug_prefix, "coefficient_log"))
-    write_debug_information(l_lin$b1, paste0(debug_prefix, "coefficient_lin"))
 
-    
     corrected_learning_rates_list[[type]][[interval_name]] <- l$learning_rate
     corrected_learning_rates_rsquared_list[[type]][[interval_name]] <- l$rsquared
     
@@ -911,13 +911,13 @@ Comparison with the simple learning rates for every country
 mypal = pal_npg("nrc")(length(relevant_currencies))
 
 corrected_rates <- results$corrected_learning_rates %>% 
-  filter(type == "adjusted") %>%
+  filter(type == "corrected") %>%
   gather(key = "interval", value = "corrected_lr", contains("-")) %>%
   select(corrected_lr, interval)
 
 combined_plot_data <- bind_rows(
     results$corrected_learning_rates %>% 
-      filter(type == "adjusted") %>% 
+      filter(type == "corrected") %>% 
       add_column(currency = "fx-corrected"),
     results$simple_learning_rates %>% 
       add_column(type = "uncorrected")
@@ -932,8 +932,6 @@ combined_plot_data <- bind_rows(
     interval = fct_relevel(interval, names(intervals)),
     currency = fct_relevel(currency, "fx-corrected", after = 0)) 
 
-library(ggrepel)
-
 plots <- list()
 
 for(i in seq_along(intervals)){
@@ -942,11 +940,9 @@ for(i in seq_along(intervals)){
   interval_name <- names(intervals[i])
   interval_years <- as.numeric(interval[1]):as.numeric(interval[2])
 
-
   corrected_rate <- corrected_rates %>% 
     filter(interval == interval_name) %>% 
     pull(corrected_lr)
-  
   
   plots[[interval_name]] <- combined_plot_data %>% 
     filter(interval == interval_name) %>% 
@@ -975,7 +971,6 @@ plot_legend <- plots[[1]] +
   guides(
     fill = guide_legend(nrow=1,byrow=TRUE))
 
-
 plot_grid(
   plot_grid(plots[[1]] + theme(legend.position = "none"), 
                    plots[[2]] + theme(legend.position = "none"), 
@@ -987,8 +982,9 @@ plot_grid(
 
 ```
 
-```{r Save results}
+```{r Save results to csv}
 
+# simple learning rates
 r1 <- results$simple_learning_rates %>% 
   gather(starts_with('2'), key = interval, value = rate) 
 
@@ -998,20 +994,17 @@ r2 <- results$simple_learning_rates_rsquared %>%
 lr_result_1 <- left_join(r1, r2, by = c("currency", "interval")) %>% 
     add_column(type = "uncorrected")
 
-
+# corrected learning rates
 r1 <- results$corrected_learning_rates %>%
-  filter(type == "adjusted") %>% 
-  select(-type) %>% 
   gather(starts_with('2'), key = interval, value = rate) 
 
 r2 <- results$corrected_learning_rates_rsquared %>%
-  filter(type == "adjusted") %>% 
-  select(-type) %>% 
   gather(starts_with('2'), key = interval, value = rsquared)
 
-lr_result_2 <- left_join(r1, r2, by = c("interval")) %>% 
-    add_column(type = "corrected", currency = params$lead_currency)
-  
+lr_result_2 <- left_join(r1, r2, by = c("interval", "type")) %>% 
+  add_column(currency = params$lead_currency) 
+
+
 bind_rows(lr_result_1,lr_result_2) %>% 
   write_csv(paste0("output/results/learning_rate_results_",params$capacity_data,"_",params$lead_currency,".csv"))
 

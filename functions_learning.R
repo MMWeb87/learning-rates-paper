@@ -165,14 +165,19 @@ get_normed_plots <- function(normed_plot_data, intervals){
     interval_name <- names(intervals[i])
     interval_years <- as.numeric(interval[1]):as.numeric(interval[2])
     
-    plots[[interval_name]] <- normed_plot_data %>% 
-      filter(year %in% interval_years) %>% 
+    filtered_data <- normed_plot_data %>% 
+      filter(year %in% interval_years)
+    
+    min_x <- min(filtered_data$cumulative_capacity)
+    
+    plots[[interval_name]] <- filtered_data %>% 
       ggplot(aes(cumulative_capacity/1000, normed_average_costs)) +
         geom_smooth(
           aes(col = currency),
           method="lm", formula = (y ~ x), se=FALSE) +
         geom_point(aes(col = currency)) +
         geom_text(aes(label = year_for_text), vjust = -0.6, hjust = 0.1, size = 3) +
+        annotate("text", x = min_x/1000, y = 0, label = "Some text") +
         scale_x_continuous(trans="log", breaks = c(c(1,seq(2,10,2)) %o% 10^(0:4)), minor_breaks = 0.5) +
         scale_y_continuous(trans="log", breaks = c(seq(0,1,0.1), seq(1.2,2,0.2)), minor_breaks = NULL) +
         guides(
@@ -292,10 +297,12 @@ print_number_table <- function(table, caption, digits = params$default_digits, .
 
 print_learning_rates_result <- function(learning_rates, rsquared, group, label){
   
+  interval_names <- names(intervals)
+  
   full_join(
       learning_rates, rsquared, 
       by = group,  suffix = c("", ".R2")) %>% 
-    select(!!group, everything()) %>% 
+    select(!!group, starts_with(interval_names[1]), starts_with(interval_names[2]),starts_with(interval_names[3])) %>% 
     print_number_table(label)
   
 }

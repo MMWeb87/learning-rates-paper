@@ -27,6 +27,7 @@ exchange_rates <- list()
 
 simple_learning_curves <- list()
 
+all_learnig_rates_results <- list()
 
 for(currency in relevant_currencies){
  
@@ -52,6 +53,7 @@ for(currency in relevant_currencies){
   
   simple_learning_curves[[currency]] <- read_csv(paste0("output/debug/USD/", interval_test_name, "_simple_regression_costs_",currency,".csv"))
   
+  all_learnig_rates_results[[currency]]  <- read_csv(paste0("output/results/learning_rate_results_IRENA_",currency,".csv"))
 
 }
 
@@ -107,15 +109,22 @@ ggplot(all_costs, mapping = aes(x = capacity, y = costs, col = currency, linetyp
 # They might contribute a difference
 reduce(exchange_rates, bind_rows) %>% 
   filter(year == 2010, currency %in% c("CNY", "EUR"), lead_currency %in% c("CNY", "EUR")) %>% 
-  mutate(inverse = 1 / rate) %>% 
-  View()
-#summarise(sum(C))
+  mutate(inverse = 1 / rate) #summarise(sum(C))
 
 reduce(exchange_rates, bind_rows) %>% 
   filter(year == 2010, currency %in% c("CNY", "USD"), lead_currency %in% c("CNY", "USD")) %>% 
-  mutate(inverse = 1 / rate) %>% 
-  View()
-  #summarise(sum(C))
+  mutate(inverse = 1 / rate)   #summarise(sum(C))
 
 
 
+# Comparing all three types of Lis ----------------------------------------
+
+
+  
+reduce(all_learnig_rates_results, bind_rows) %>% 
+  distinct() %>% 
+  mutate(type = fct_relevel(type, "uncorrected", "uncorrected-weighted", "corrected")) %>% 
+  arrange(currency, interval) %>% 
+  ggplot(mapping = aes(x = currency, y = rate, fill = type)) +
+    geom_col(position = "dodge2") +
+    facet_grid( ~ interval)
