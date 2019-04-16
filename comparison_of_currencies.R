@@ -1,5 +1,8 @@
 
 
+library(tidyverse)
+source("init.R")
+
 # Precondition: render_reports has been run with debug = yes in the params of the main file
 
 
@@ -8,9 +11,6 @@
 # Here, I compare all the results for different base currencies. 
 
 
-library(tidyverse)
-
-source("init.R")
 interval_test_name <- "2006-2016"
 
 results_tibble <- tibble(
@@ -82,8 +82,6 @@ if(sum_of_differences != 0){
 
 # Plot different currencies -----------------------------------------------
 
-
-
 all_costs <- left_join(
     reduce(regression_costs, bind_rows),
     reduce(regression_costs_unadjusted, bind_rows),
@@ -103,7 +101,6 @@ ggplot(all_costs, mapping = aes(x = capacity, y = costs, col = currency, linetyp
   scale_x_log10()
 
 
-
 # Comparing average local costs -------------------------------------------
 
 # They might contribute a difference
@@ -119,8 +116,6 @@ reduce(exchange_rates, bind_rows) %>%
 
 # Comparing all three types of Lis ----------------------------------------
 
-
-  
 reduce(all_learnig_rates_results, bind_rows) %>% 
   distinct() %>% 
   mutate(type = fct_relevel(type, "uncorrected", "uncorrected-weighted", "corrected")) %>% 

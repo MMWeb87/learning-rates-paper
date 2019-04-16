@@ -18,3 +18,7 @@ for(report_currency in report_currencies){
 rmarkdown::render("analysis_learningrates_corrections.Rmd", output_format = "pdf_document", 
                   output_file = paste0(filename, ".pdf"), output_dir = "output/reports_files/", 
                   params = list(use_kable = TRUE))
+
+rmarkdown::render("analysis_results.Rmd", output_format = "pdf_document", 
+                  output_file = paste0("results.pdf"), output_dir = "output/reports_files/", 
+                  params = list(use_kable = TRUE))

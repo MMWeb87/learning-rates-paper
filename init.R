@@ -11,6 +11,12 @@ filenames <- list(
   outliers = "input/outliers.csv"
 )
 
+if(exists("params")){
+  if(params$run_test){
+    filenames[["exchange_rates"]] <- "input/USD_exchange_rates_prop2_test.csv"
+  }
+}
+
 
 # basic variables
 

@@ -21,6 +21,7 @@ params:
   default_digits: 2
   debug: yes
   use_kable: no
+  run_test: no
 ---
 
 ```{r setup, include=FALSE}
@@ -797,26 +798,38 @@ for(t in all_years){
     C_i_t <- filter(C, year == t, currency == i) %>% pull(C)
     
     P_comp[P_comp$year == t & P_comp$currency == i, "nominal_costs"] <- delta_i_t * w_i_t * C_i_t
-    P_comp_tilde[P_comp$year == t & P_comp$currency == i, "nominal_costs"] <- delta_i_t * w_i_0 * C_i_
-    
+    P_comp_tilde[P_comp$year == t & P_comp$currency == i, "nominal_costs"] <- delta_i_t * w_i_0 * C_i_t
+
   }
   
 }
-
-# for debugging puropses. Not used for lr calculation
-alpha <- P_comp_tilde %>% 
-  left_join(P_comp, by = c("currency", "year"), suffix = c("_tilde", "")) %>% 
-  mutate(alpha = nominal_costs_tilde / nominal_costs) %>% 
-  write_debug_information("alphas")
 
 write_debug_information(P_comp, paste0("P_comp_nominal"))
 
 P <- calculate_P(P_comp)
 P_tilde <- calculate_P(P_comp_tilde)
 
+# for debugging puropses. Not used for lr calculation
+alpha <- left_join(P$P_nominal, P_tilde$P_nominal, by = c("currency", "year"), suffix = c("", "_tilde")) %>% 
+  mutate(alpha = costs_tilde / costs)
+  
+#write_debug_information("alphas")
+
 
 ```
 
+Here we test if the propositions make sense. To test the propositions, run the file with params run_test:yes
+```{r Test of prop 2}
+
+if(params$run_test){
+  
+  # check prop 2
+  # in test file, EUR is i, and all others are l
+  # alphas > 2006 must be > 1, and P_tilde > 2006, > P
+  alpha %>% View()
+}
+
+```
 
 ### Step 5: Calculation of the learning rate
 
@@ -984,30 +997,34 @@ plot_grid(
 
 ```{r Save results to csv}
 
-# simple learning rates
-r1 <- results$simple_learning_rates %>% 
-  gather(starts_with('2'), key = interval, value = rate) 
+if(!params$run_test){
 
-r2 <- results$simple_learning_rates_rsquared %>% 
-  gather(starts_with('2'), key = interval, value = rsquared)
+  
+  # simple learning rates
+  r1 <- results$simple_learning_rates %>% 
+    gather(starts_with('2'), key = interval, value = rate) 
+  
+  r2 <- results$simple_learning_rates_rsquared %>% 
+    gather(starts_with('2'), key = interval, value = rsquared)
+  
+  lr_result_1 <- left_join(r1, r2, by = c("currency", "interval")) %>% 
+      add_column(type = "uncorrected")
+  
+  # corrected learning rates
+  r1 <- results$corrected_learning_rates %>%
+    gather(starts_with('2'), key = interval, value = rate) 
+  
+  r2 <- results$corrected_learning_rates_rsquared %>%
+    gather(starts_with('2'), key = interval, value = rsquared)
+  
+  lr_result_2 <- left_join(r1, r2, by = c("interval", "type")) %>% 
+    add_column(currency = params$lead_currency) 
+  
+  
+  bind_rows(lr_result_1,lr_result_2) %>% 
+    write_csv(paste0("output/results/learning_rate_results_test_",params$capacity_data,"_",params$lead_currency,".csv"))
 
-lr_result_1 <- left_join(r1, r2, by = c("currency", "interval")) %>% 
-    add_column(type = "uncorrected")
-
-# corrected learning rates
-r1 <- results$corrected_learning_rates %>%
-  gather(starts_with('2'), key = interval, value = rate) 
-
-r2 <- results$corrected_learning_rates_rsquared %>%
-  gather(starts_with('2'), key = interval, value = rsquared)
-
-lr_result_2 <- left_join(r1, r2, by = c("interval", "type")) %>% 
-  add_column(currency = params$lead_currency) 
-
-
-bind_rows(lr_result_1,lr_result_2) %>% 
-  write_csv(paste0("output/results/learning_rate_results_",params$capacity_data,"_",params$lead_currency,".csv"))
-
+}
 
 ```
 
