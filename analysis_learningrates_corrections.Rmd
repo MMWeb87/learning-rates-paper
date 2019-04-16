@@ -18,8 +18,9 @@ params:
   capacity_threshold: 5
   lead_currency: USD
   exchange_rate_norm_year: 2006
+  deflate: yes
   default_digits: 2
-  debug: yes
+  debug: no
   use_kable: no
   run_test: no
 ---
@@ -44,6 +45,7 @@ all_years <- as.numeric(T0):as.numeric(T_max)
 names(intervals) <- make_interval_names(intervals)
 
 lead_currency <- params$lead_currency
+deflation_text <- if_else(params$deflate, "real costs", "nominal costs")
 
 # for report
 currencies_print <- paste(relevant_currencies, collapse=", ")
@@ -60,7 +62,7 @@ theme_set(theme_bw(base_size = 9.5) + theme(legend.title=element_blank()))
 ```
 
 
-# Results for PV -- in lead currency `r params$lead_currency` & with `r params$capacity_data` marketshare 
+# Results for PV -- in lead currency `r params$lead_currency` & with `r params$capacity_data` marketshare in `r deflation_text` 
 
 This file documents the method of the our learning rate paper. In it,  we present an improved approach that uses global market shares (in this document based on data from `r params$capacity_data`) and a correction factor to calculate a global learning rate that is the same over all currencies. 
 
@@ -492,19 +494,24 @@ X <- X_all_subsets %>%
 
 # Learning rate calculations
 
+We calculate 3 types of average costs and learning rates in this file:
+
+- uncorrected learning rates
+- uncorrected-weighted learning rates
+- corrected learing
+
 For a detailed explanation of the theories behind the learning rates calculations and currency corrections, compare our paper.
 
 ## Method 1: Calculation of the uncorrected learning rates 
 
-To calculate the simple learning rates, we convert **all available project costs** to different currencies. We then derive the learning rate for each currency from the global average costs $C_{global,t,2017}^{i}$ of all available projects.
+To calculate the uncorrected learning rates, we convert **all available project costs** to different currencies. We then derive the learning rate for each currency from the global average costs $C_{global,t,2017}^{i}$ of all available projects.
 
 In Table 1 & 2 and Figure 1, we present the results of the method 1 approach.
 
 ### Step 1: Calculation of costs in every relevant currency
 In the first step, we calculate the value for each project in each relevant currency (`r currencies_print`).
 
-
-```{r Calculate simple learning rates}
+```{r Calculate uncorrected learning rates}
 
 projects_with_costs_in_currencies <- projects_with_costs_in_interval
 
@@ -535,28 +542,30 @@ projects_with_costs_in_currencies
 
 ```
 
-### Step 2. Aggregate data to means
+### Step 2. Aggregate data to means and deflate
 
 In the second step, we aggregate the data by yearly averages for each currency. The mean is a not weighted (in contrast to method 2) average of all projects.
 
+Here we also deflate the average to 2017 real values depending if params$deflate is set true.
+
+
 ```{r aggregate to average costs, echo=TRUE}
 
-average_global_costs <- projects_with_costs_in_currencies %>% 
+average_global_costs_uncor <- projects_with_costs_in_currencies %>% 
   select(year, !!relevant_currencies) %>% 
   gather("currency", "value", !!relevant_currencies) %>% 
   group_by(currency, year) %>% 
-  summarise(nominal_costs = mean(value)) %>% ungroup()
+  summarise(nominal_costs = mean(value)) %>% 
+  ungroup()
 
 ```
 
-### Step 3. Convert to real values (in 2017 units)
+### Step 3. Deflate to real values (2017)
 
-We convert this the average in national nominal currency to the real 2017 values for each base currency.
+Only if params\$deflate is true. Currently: `r params$deflate`
 
 ```{r}
-
-average_global_costs_real <- convert_to_real_costs(average_global_costs, defl)
-
+average_global_costs_uncor <- convert_to_real_costs(average_global_costs_uncor, defl)
 ```
 
 ### Step 4. Calculation of learning rates
@@ -579,9 +588,9 @@ for(j in seq_along(relevant_currencies)){
     interval_name <- names(intervals[i])
     interval_years <- as.numeric(interval[1]):as.numeric(interval[2])
     
-    regression_costs <- average_global_costs_real %>% 
+    regression_costs <- average_global_costs_uncor %>% 
       filter(year %in% !!interval_years, currency == !!currency) %>% 
-      pull(real_costs)
+      pull(average_costs)
     
     regression_cumulative_capacity <- X %>% 
       filter(year %in% interval_years) %>% 
@@ -633,12 +642,12 @@ To plot all learning rates in the same plot, it is necessary to norm the costs. 
 
 ```{r Combined and normed plot, echo=FALSE, fig.cap="Comparison of learning rates, as index of the average costs in 2006", fig.width=fig.width.baseline*output.size, fig.asp=0.4, out.width=out.width.default}
 
-combined_plot_data <- average_global_costs_real %>% 
+combined_plot_data <- average_global_costs_uncor %>% 
   inner_join(X) %>% 
   filter(year >= T0, year <= T_max) %>% 
   select(
     year, 
-    average_costs = real_costs, 
+    average_costs, 
     currency, 
     cumulative_capacity = X) %>% 
   mutate(currency = factor(currency, plot_order_currency))
@@ -750,7 +759,7 @@ average_local_costs <- projects_with_costs_in_interval %>%
   group_by(year, local_currency) %>% 
   summarise(C = mean(local_value)) %>% ungroup() %>%
   rename(currency = local_currency) %>% 
-  complete(year,currency, fill = list(C = 0))
+  complete(year, currency, fill = list(C = 0))
 
 ```
 
@@ -809,20 +818,29 @@ write_debug_information(P_comp, paste0("P_comp_nominal"))
 P <- calculate_P(P_comp)
 P_tilde <- calculate_P(P_comp_tilde)
 
-# for debugging puropses. Not used for lr calculation
-alpha <- left_join(P$P_nominal, P_tilde$P_nominal, by = c("currency", "year"), suffix = c("", "_tilde")) %>% 
-  mutate(alpha = costs_tilde / costs)
-  
-#write_debug_information("alphas")
-
 
 ```
+
+### Step 4. Deflate to real values
+
+We defalte after the currency conversion. I.e. the learning rates of multiple base currencies will only be the same for nominal costs. For real costs, the deflator of different base currencies lead to different learning rates.
+
+Only if params\$deflate is true. Currently: `r params$deflate`
+
+```{r}
+P <- convert_to_real_costs(P, defl)
+P_tilde <- convert_to_real_costs(P_tilde, defl)
+```
+
+
 
 Here we test if the propositions make sense. To test the propositions, run the file with params run_test:yes
 ```{r Test of prop 2}
 
+alpha <- left_join(P, P_tilde, by = c("currency", "year"), suffix = c("", "_tilde")) %>% 
+  mutate(alpha = average_costs_tilde / average_costs)
+
 if(params$run_test){
-  
   # check prop 2
   # in test file, EUR is i, and all others are l
   # alphas > 2006 must be > 1, and P_tilde > 2006, > P
@@ -855,14 +873,14 @@ for(type in types){
     interval_name <- names(intervals[i])
     
     if(type == "uncorrected-weighted"){
-      relevant_P <- P$P_real
+      relevant_P <- P
     } else {
-      relevant_P <- P_tilde$P_real
+      relevant_P <- P_tilde
     }
     
     regression_costs <- relevant_P %>% 
       filter(year %in% interval_years) %>% 
-      pull(costs)
+      pull(average_costs)
     
     regression_cumulative_capacity <- X %>% 
       filter(year %in% interval_years) %>% 

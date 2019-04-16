@@ -84,12 +84,19 @@ calculate_delta <- function(projects, x_global){
 }
 
 
-convert_to_real_costs <- function(average_global_costs_df, deflator){
+convert_to_real_costs <- function(average_global_costs_df, deflator, deflate = params$deflate){
   
-  average_global_costs_df %>% 
-    inner_join(deflator, by = c("currency", "year")) %>% 
-    mutate(real_costs = nominal_costs / defl) %>% 
-    select(year, currency, real_costs)
+  if(deflate){
+    average_global_costs_df %>% 
+      inner_join(deflator, by = c("currency", "year")) %>% 
+      mutate(real_costs = nominal_costs / defl) %>% 
+      select(year, currency, average_costs =  real_costs)
+  
+  } else {
+    average_global_costs_df %>% 
+      select(year, currency, average_costs = nominal_costs)
+  }
+
   
 }
 
@@ -98,17 +105,10 @@ calculate_P <- function(P_component){
   # calculate weighted average global cost converted to lead currency l in year t
   
   P_comp_sum <- P_component %>% 
-    mutate(real_costs = nominal_costs / defl) %>% 
     group_by(year, lead_currency) %>% 
-    summarise(P_nominal = sum(nominal_costs), P_real = sum(real_costs))
+    summarise(P_nominal = sum(nominal_costs))
   
-  P_nominal <- select(P_comp_sum, currency = lead_currency, year, costs = P_nominal)
-  P_real <- select(P_comp_sum, currency = lead_currency, year, costs = P_real)
-  
-  list(
-    "P_nominal" = P_nominal,
-    "P_real" = P_real
-  )
+  select(P_comp_sum, year, currency = lead_currency, nominal_costs = P_nominal)
   
 }
 
