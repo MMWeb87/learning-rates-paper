@@ -19,17 +19,19 @@ calculate_learning_rate <- function(costs, cumulative_capacity, digits = 10){
   # Extract learning rate from coefficient b1
   # b1 = delta/r; r = assuming constant returns-to-scale parameter = 1. 
   # delta_L is the so-called learning-by-doing elasticity, indicating the percentage change in cost following a one percentage increase in cumulative capacity.
-  b1 <- coef(fit.lm.log)[2]
+  delta_L <- coef(fit.lm.log)[2]
+  delta_L_confint <- confint(fit.lm.log, "log(cumulative_capacity)")
   
-  delta_L <- b1
   learning_rate <- 1 - 2 ^ delta_L # Percentage decrease in wind power cost for each doubling of cumulative capacity.
+  confints <- 1 - 2 ^ delta_L_confint # Percentage decrease in wind power cost for each doubling of cumulative capacity.
+
   rsquared <- summary(fit.lm.log)$r.squared
   
   l <- list(
     learning_rate = as.double(round(learning_rate*100,digits)),
+    confint = confints,
     rsquared = round(rsquared,2),
-    summary = summary(fit.lm.log),
-    b1 = b1
+    summary = summary(fit.lm.log)
   )
   
   return(l)

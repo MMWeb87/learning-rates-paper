@@ -46,6 +46,8 @@ names(intervals) <- make_interval_names(intervals)
 
 lead_currency <- params$lead_currency
 deflation_text <- if_else(params$deflate, "real costs", "nominal costs")
+version <- if_else(params$deflate, "real", "nominal")
+
 
 # for report
 currencies_print <- paste(relevant_currencies, collapse=", ")
@@ -833,22 +835,6 @@ P_tilde <- convert_to_real_costs(P_tilde, defl)
 ```
 
 
-
-Here we test if the propositions make sense. To test the propositions, run the file with params run_test:yes
-```{r Test of prop 2}
-
-alpha <- left_join(P, P_tilde, by = c("currency", "year"), suffix = c("", "_tilde")) %>% 
-  mutate(alpha = average_costs_tilde / average_costs)
-
-if(params$run_test){
-  # check prop 2
-  # in test file, EUR is i, and all others are l
-  # alphas > 2006 must be > 1, and P_tilde > 2006, > P
-  alpha %>% View()
-}
-
-```
-
 ### Step 5: Calculation of the learning rate
 
 A regression over $P_{t,2017}^l$ gives us the **un**corrected global learning rates in `r lead_currency`,. The **un**corrected rate includes both technological learning and changes in exchange rates. Therefore, it is different in different lead currencies. To get the same number in every lead currency (i.e. a truly global learning rate), we adjust the uncorrected-weighted global learning rate for the currency effect. Applying $\alpha$ to the learning rate calculation results in the corrected global learning rate. The corrected rate only includes technological learning.
@@ -887,6 +873,8 @@ for(type in types){
       pull(X)
     
     l <- calculate_learning_rate(regression_costs, regression_cumulative_capacity)
+    
+    print(l$confints)
 
     debug_prefix <- paste0(interval_name, "_", type,"_")
     
@@ -894,10 +882,9 @@ for(type in types){
       costs = regression_costs, 
       capacity = regression_cumulative_capacity), paste0(debug_prefix, "regression_costs"))
 
-    write_debug_information(l$b1, paste0(debug_prefix, "coefficient_log"))
-
     corrected_learning_rates_list[[type]][[interval_name]] <- l$learning_rate
     corrected_learning_rates_rsquared_list[[type]][[interval_name]] <- l$rsquared
+    
     
     corrected_learning_rates_data_list[[type]][[interval_name]] <- data.frame(
       rsquared = l$rsquared,
@@ -906,7 +893,8 @@ for(type in types){
       capacity = regression_cumulative_capacity,
       costs = regression_costs,
       type = type,
-      interval = interval_name
+      interval = interval_name,
+      confint = l$confint
     )
   
   }
@@ -1040,7 +1028,8 @@ if(!params$run_test){
   
   
   bind_rows(lr_result_1,lr_result_2) %>% 
-    write_csv(paste0("output/results/learning_rate_results_test_",params$capacity_data,"_",params$lead_currency,".csv"))
+    add_column(version = version) %>% 
+    write_csv(paste0("output/results/learning_rate_results_",params$lead_currency,"_",version,".csv"))
 
 }
 

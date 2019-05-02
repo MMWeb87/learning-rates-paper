@@ -8,6 +8,9 @@ output:
   pdf_document:
     highlight: zenburn
     keep_tex: yes
+params:
+  version: 'real'
+  run_test: no
 ---
 
 ```{r setup, include=FALSE}
@@ -42,16 +45,13 @@ We use this file to compare the final results from analysis_learningrates_correc
 all_learnig_rates_results <- list()
 
 for(currency in relevant_currencies){
-  all_learnig_rates_results[[currency]]  <- read_csv(paste0("output/results/learning_rate_results_IRENA_",currency,".csv"))
+  all_learnig_rates_results[[paste(currency,"real")]]  <- read_csv(paste0("output/results/learning_rate_results_",currency,"_real.csv"))
+  all_learnig_rates_results[[paste(currency,"nominal")]]  <- read_csv(paste0("output/results/learning_rate_results_",currency,"_nominal.csv"))
+
 }
 
 ```
 
-
-```{r All results, fig.cap="All results", fig.asp=0.4}
-
-
-```
 
 
 ```{r Combined plot, fig.cap="Learning rates plot", fig.asp=0.4}
@@ -84,24 +84,17 @@ for(i in seq_along(intervals)){
   plots[[interval_name]] <- reduce(all_learnig_rates_results, bind_rows) %>% 
     distinct() %>% 
     mutate(type = fct_relevel(type, "uncorrected", "uncorrected-weighted", "corrected")) %>% 
-    filter(interval == interval_name) %>%
     arrange(currency, interval) %>% 
-    ggplot(mapping = aes(x = currency, y = rate, alpha = type, group = type, fill = currency)) +
+    ggplot(mapping = aes(x = type, y = rate, fill = currency)) +
       geom_col(position = "dodge2") +
-      geom_text(. %>% filter(type == "uncorrected"), mapping = aes(y = rate/2, label = round(rate)), nudge_x = -0.3, col = "white", size = 2.8, angle = 90) +
-      geom_text(. %>% filter(type == "uncorrected-weighted"), mapping = aes(y = rate/2, label = round(rate)), nudge_x = 0, col = "black", size =2.8, angle = 90) +
-      geom_text(. %>% filter(type == "corrected"), mapping = aes(y = rate/2, label = round(rate)), nudge_x = 0.3, col = "black", size = 2.8, angle = 90) +
-
-      scale_alpha_manual(values = c(1,0.75,0.4))   +
-      #scale_fill_manual(values = c("#000000", "white", mypal)) +
-      scale_y_continuous(limits = c(0,40), expand = expand_scale(mult = c(0, 0.1))) +
-      labs(
-        subtitle = interval_name, y = paste0("Learning rate in %")) +
+      geom_text(. %>% filter(type == type), mapping = aes(y = rate/2, label = round(rate)), 
+                position = position_dodge(0.9), col = "white", size = 2.8, angle = 90) +
+      scale_y_continuous(limits = c(0,44), expand = expand_scale(mult = c(0, 0.1))) +
+      labs(y = paste0("Learning rate in %")) +
       theme(
         axis.title.x = element_blank(),
-        axis.text.x=element_blank(),
-        axis.ticks.x=element_blank(), 
         panel.grid.major = element_blank()) +
+      facet_grid(version ~ interval) +
       scale_fill_npg()
 }
 
@@ -111,14 +104,16 @@ plot_legend <- plots[[1]] +
   guides(
     fill = guide_legend(nrow=1,byrow=TRUE))
 
-plot_grid(
-  plot_grid(
-    plots[[1]] + theme(legend.position = "none"), 
-    plots[[2]] + theme(legend.position = "none", axis.title.y = element_blank()),
-    plots[[3]] + theme(legend.position = "none", axis.title.y = element_blank()) , 
-    labels = c("a", "b", "c"), rel_widths = c(1,1,1), align = "h", ncol = 3),
-  get_legend(plot_legend), rel_heights = c(5,1),
-  ncol = 1)
+plots[[1]]
+
+# plot_grid(
+#   plot_grid(
+#     plots[[1]] + theme(legend.position = "none"), 
+#     plots[[2]] + theme(legend.position = "none", axis.title.y = element_blank()),
+#     plots[[3]] + theme(legend.position = "none", axis.title.y = element_blank()), 
+#     labels = c("a", "b", "c"), rel_widths = c(1,1,1), align = "h", ncol = 3),
+#   get_legend(plot_legend), rel_heights = c(5,1),
+#   ncol = 1)
 
 
 ```

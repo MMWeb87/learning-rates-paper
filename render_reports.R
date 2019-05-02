@@ -7,14 +7,14 @@ for(report_currency in report_currencies){
   # The capacity in 2006 is not changed.
   
   rmarkdown::render("analysis_learningrates_corrections.Rmd", output_format = "word_document", 
-                    output_file = paste0(filename, "_", report_currency, "real.docx"), output_dir = "output/reports/", 
+                    output_file = paste0(filename, "_", report_currency, "_real.docx"), output_dir = "output/reports/", 
                     params = list(
                       deflate = TRUE,
                       lead_currency = report_currency,
                       use_kable = TRUE))
   
   rmarkdown::render("analysis_learningrates_corrections.Rmd", output_format = "word_document", 
-                    output_file = paste0(filename, "_", report_currency, "nominal.docx"), output_dir = "output/reports/", 
+                    output_file = paste0(filename, "_", report_currency, "_nominal.docx"), output_dir = "output/reports/", 
                     params = list(
                       deflate = FALSE,
                       lead_currency = report_currency,
@@ -27,5 +27,11 @@ rmarkdown::render("analysis_learningrates_corrections.Rmd", output_format = "pdf
                   params = list(use_kable = TRUE))
 
 rmarkdown::render("analysis_results.Rmd", output_format = "pdf_document", 
-                  output_file = paste0("results.pdf"), output_dir = "output/reports_files/", 
-                  params = list(use_kable = TRUE))
+                  output_file = paste0("results_nominal.pdf"), output_dir = "output/reports_files/", 
+                  params = list(
+                    version = "nominal"))
+
+rmarkdown::render("analysis_results.Rmd", output_format = "pdf_document", 
+                  output_file = paste0("results_real.pdf"), output_dir = "output/reports_files/", 
+                  params = list(
+                    version = "real"))
