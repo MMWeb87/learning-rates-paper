@@ -27,6 +27,8 @@ params:
 
 ```{r setup, include=FALSE}
 
+remove(list = ls()[ls() != "params"])
+
 library(knitr)
 library(ggsci)
 library(gridExtra)
@@ -36,14 +38,9 @@ library(glue)
 library(cowplot)
 library(ggrepel)
 
-
-source("init.R")
 source("functions_learning.R")
+source("init.R")
 
-T0 <- min(unlist(intervals))
-T_max <- max(unlist(intervals))
-all_years <- as.numeric(T0):as.numeric(T_max)
-names(intervals) <- make_interval_names(intervals)
 
 lead_currency <- params$lead_currency
 deflation_text <- if_else(params$deflate, "real costs", "nominal costs")
@@ -60,7 +57,9 @@ knitr::opts_chunk$set(
   fig.width=fig.width.baseline*output.size, 
   out.width=out.width.default)
 
-theme_set(theme_bw(base_size = 9.5) + theme(legend.title=element_blank()))
+theme_set(theme_bw(base_size = 9.5) + theme(
+  legend.title=element_blank()),
+  legend.spacing.x = unit(0.1, 'cm'))
 
 ```
 
