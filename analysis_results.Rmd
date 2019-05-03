@@ -9,7 +9,6 @@ output:
     highlight: zenburn
     keep_tex: yes
 params:
-  version: 'real'
   run_test: no
 ---
 
@@ -39,7 +38,6 @@ theme_set(theme_bw(base_size = 9.5) + theme(legend.title=element_blank()))
 
 We use this file to compare the final results from analysis_learningrates_corrections.
 
-
 ```{r load all results}
 
 all_learnig_rates_results <- list()
@@ -53,76 +51,49 @@ for(currency in relevant_currencies){
 ```
 
 
+```{r all_results_plot, fig.cap="Learning rates plot", fig.asp=0.4}
 
-```{r Combined plot, fig.cap="Learning rates plot", fig.asp=0.4}
+all_learnig_rates_results_plot_data <- all_learnig_rates_results %>%   
+  reduce(bind_rows) %>% 
+  distinct() %>% 
+  mutate(
+    type = fct_relevel(type, "uncorrected", "uncorrected-weighted", "corrected"),
+    type = fct_recode(type,
+       "Uncorrected \n project-wt." = "uncorrected",
+       "Uncorrected \n market share-wt." = "uncorrected-weighted",
+       "Fx-corrected \n market share-wt." = "corrected"),
+    interval = fct_relevel(interval, factor_order_intervals),
+    interval = fct_recode(interval,
+       "Full 10-year interval (2006-2016)" = "2006-2016",
+       "First 5-year interval (2006-2011)" = "2006-2011",
+       "Second 5-year interval (2011-2016)" = "2011-2016")
+    ) %>% 
+  arrange(currency, interval)
 
-mypal = pal_npg("nrc")(length(relevant_currencies))
-
-plots <- list()
-
-names(intervals) <- make_interval_names(intervals)
-factor_order_intervals = as.character(names(intervals))
-
-
-for(i in seq_along(intervals)){
+plot_labels = all_learnig_rates_results_plot_data %>% 
+  expand(version, interval) %>% 
+  add_column(label = letters[seq( from = 1, to = 6 )])
   
-  interval <- intervals[[i]]
-  interval_name <- names(intervals[i])
-  interval_years <- as.numeric(interval[1]):as.numeric(interval[2])
-  
-  x_text_shift <- function(type){
-    shift = 0
-    if(type == 1){
-      shift = -10
-    } else if(type == 2){
-      shift = 10
-    }
-    
-    return(shift)
-  }
-  
+all_learnig_rates_results_plot = all_learnig_rates_results_plot_data %>% 
+  ggplot(mapping = aes(x = type, y = rate, fill = currency)) +
+    geom_col(position = "dodge2") +
+    geom_text(. %>% filter(type == type), mapping = aes(y = rate/2, label = round(rate)), 
+              position = position_dodge(0.9), col = "white", size = 2.8, angle = 90) +
+    geom_text(data = plot_labels, mapping = aes(x = 0.6, y = 43, label = label), fontface = "bold") +
+    scale_y_continuous(limits = c(0,44), expand = expand_scale(mult = c(0, 0.1))) +
+    labs(
+      y = paste0("Learning rate in %")) +
+    theme(
+      axis.title.x = element_blank(),
+      panel.grid.major = element_blank(),
+      legend.position="bottom",
+      legend.spacing.x = unit(0.1, 'cm')) +
+    guides(
+      fill = guide_legend(nrow = 1)) +
+    facet_grid(version ~ interval, switch = "y") +
+    scale_fill_manual(values = plot_colours_currencies)
 
-  
-  plots[[interval_name]] <- reduce(all_learnig_rates_results, bind_rows) %>% 
-    distinct() %>% 
-    mutate(
-      type = fct_relevel(type, "uncorrected", "uncorrected-weighted", "corrected"),
-      interval = fct_relevel(interval, !!!factor_order_intervals),
-      interval = fct_recode(interval,
-         "Full interval (2006-2016)" = "2006-2016",
-         "Half interval (2006-2011)" = "2006-2011",
-         "Half interval (2011-2016)" = "2011-2016")
-      ) %>% 
-    arrange(currency, interval) %>%
-    ggplot(mapping = aes(x = type, y = rate, fill = currency)) +
-      geom_col(position = "dodge2") +
-      geom_text(. %>% filter(type == type), mapping = aes(y = rate/2, label = round(rate)), 
-                position = position_dodge(0.9), col = "white", size = 2.8, angle = 90) +
-      scale_y_continuous(limits = c(0,44), expand = expand_scale(mult = c(0, 0.1))) +
-      labs(y = paste0("Learning rate in %")) +
-      theme(
-        axis.title.x = element_blank(),
-        panel.grid.major = element_blank()) +
-      facet_grid(version ~ interval, switch = "y") +
-      scale_fill_npg()
-}
-
-# TODO: integrate in get_legend function
-plot_legend <- plots[[1]] +
-  theme(legend.position="bottom") +
-  guides(
-    fill = guide_legend(nrow=1,byrow=TRUE))
-
-plots[[1]]
-
-# plot_grid(
-#   plot_grid(
-#     plots[[1]] + theme(legend.position = "none"), 
-#     plots[[2]] + theme(legend.position = "none", axis.title.y = element_blank()),
-#     plots[[3]] + theme(legend.position = "none", axis.title.y = element_blank()), 
-#     labels = c("a", "b", "c"), rel_widths = c(1,1,1), align = "h", ncol = 3),
-#   get_legend(plot_legend), rel_heights = c(5,1),
-#   ncol = 1)
+all_learnig_rates_results_plot
 
 
 ```

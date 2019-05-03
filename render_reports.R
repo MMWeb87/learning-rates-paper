@@ -27,11 +27,4 @@ rmarkdown::render("analysis_learningrates_corrections.Rmd", output_format = "pdf
                   params = list(use_kable = TRUE))
 
 rmarkdown::render("analysis_results.Rmd", output_format = "pdf_document", 
-                  output_file = paste0("results_nominal.pdf"), output_dir = "output/reports_files/", 
-                  params = list(
-                    version = "nominal"))
-
-rmarkdown::render("analysis_results.Rmd", output_format = "pdf_document", 
-                  output_file = paste0("results_real.pdf"), output_dir = "output/reports_files/", 
-                  params = list(
-                    version = "real"))
+                  output_file = paste0("all_results.pdf"), output_dir = "output/reports_files/")
