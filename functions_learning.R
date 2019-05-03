@@ -12,7 +12,7 @@
 #'
 #' @return Learning rate
 #' 
-calculate_learning_rate <- function(costs, cumulative_capacity, digits = 10){
+calculate_learning_rate <- function(costs, cumulative_capacity, digits = params$default_digits){
 
   fit.lm.log <- lm(log(costs) ~ log(cumulative_capacity))  
 
@@ -28,8 +28,9 @@ calculate_learning_rate <- function(costs, cumulative_capacity, digits = 10){
   rsquared <- summary(fit.lm.log)$r.squared
   
   l <- list(
-    learning_rate = as.double(round(learning_rate*100,digits)),
-    confint = confints,
+    learning_rate = round(learning_rate*100,digits),
+    confint_lower = round(confints[2]*100, digits),
+    confint_upper = round(confints[1]*100, digits),
     rsquared = round(rsquared,2),
     summary = summary(fit.lm.log)
   )
@@ -297,15 +298,16 @@ print_number_table <- function(table, caption, digits = params$default_digits, .
   }
 }
 
-print_learning_rates_result <- function(learning_rates, rsquared, group, label){
+print_learning_rates_result <- function(df){
   
-  interval_names <- names(intervals)
+  nested_df <- df %>% 
+    nest(-interval)
   
-  full_join(
-      learning_rates, rsquared, 
-      by = group,  suffix = c("", ".R2")) %>% 
-    select(!!group, starts_with(interval_names[1]), starts_with(interval_names[2]),starts_with(interval_names[3])) %>% 
-    print_number_table(label)
+  for(i in 1:nrow(nested_df)){
+    print(nested_df[[i, "interval"]])
+    print_number_table(nested_df[[i, "data"]], nested_df[[i, "interval"]])
+    
+  }
   
 }
 

@@ -61,6 +61,8 @@ mypal = pal_npg("nrc")(length(relevant_currencies))
 plots <- list()
 
 names(intervals) <- make_interval_names(intervals)
+factor_order_intervals = as.character(names(intervals))
+
 
 for(i in seq_along(intervals)){
   
@@ -83,8 +85,15 @@ for(i in seq_along(intervals)){
   
   plots[[interval_name]] <- reduce(all_learnig_rates_results, bind_rows) %>% 
     distinct() %>% 
-    mutate(type = fct_relevel(type, "uncorrected", "uncorrected-weighted", "corrected")) %>% 
-    arrange(currency, interval) %>% 
+    mutate(
+      type = fct_relevel(type, "uncorrected", "uncorrected-weighted", "corrected"),
+      interval = fct_relevel(interval, !!!factor_order_intervals),
+      interval = fct_recode(interval,
+         "Full interval (2006-2016)" = "2006-2016",
+         "Half interval (2006-2011)" = "2006-2011",
+         "Half interval (2011-2016)" = "2011-2016")
+      ) %>% 
+    arrange(currency, interval) %>%
     ggplot(mapping = aes(x = type, y = rate, fill = currency)) +
       geom_col(position = "dodge2") +
       geom_text(. %>% filter(type == type), mapping = aes(y = rate/2, label = round(rate)), 
@@ -94,7 +103,7 @@ for(i in seq_along(intervals)){
       theme(
         axis.title.x = element_blank(),
         panel.grid.major = element_blank()) +
-      facet_grid(version ~ interval) +
+      facet_grid(version ~ interval, switch = "y") +
       scale_fill_npg()
 }
 

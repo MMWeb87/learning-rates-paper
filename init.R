@@ -30,7 +30,6 @@ intervals <- list(
   c(2006,2016)
 )
 
-
 # Tables
 table_order_currency <- c("USD", "EUR", "JPY", "CNY", "INR", "GBP")
 
