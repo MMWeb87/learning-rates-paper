@@ -419,8 +419,8 @@ exchange_rates_index$currency <- factor(exchange_rates_index$currency, plot_orde
 exchange_rates_plot <- ggplot(exchange_rates_index, aes(x = date, y = normed_rate, col = currency, linetype = currency)) +
   geom_line() +
   scale_x_date(date_breaks = "1 year", date_labels = "%Y") +
-  scale_linetype_manual(values=plot_order_linetype) +
-  scale_color_npg() +
+  scale_linetype_manual(values = plot_order_linetype) +
+  scale_color_manual(values = plot_colours_currencies) +
   labs(x = "", 
        y = paste("Index of", lead_currency ,"exchange rate (Jan 2006)")) +
   theme(axis.text.x = element_text(angle = 90, hjust = 1,vjust = 0.5 ))
@@ -460,10 +460,11 @@ defl <- cpi_deflators %>%
 defl_plot <- subset(defl, year>=T0, year<=T_max)
 defl_plot$year <- ymd(paste(defl_plot$year,"-01-01"))
 
-ggplot(defl_plot, aes(year, defl, col = currency, linetype = currency)) + 
+delfator_plot <- ggplot(defl_plot, aes(year, defl, col = currency, linetype = currency)) + 
   geom_line() + 
   scale_linetype_manual(values=plot_order_linetype) +
-  scale_color_npg() +
+  scale_colour_manual(values = plot_colours_currencies) +
+
   labs(
     x = "Year",
     y = "Deflation relative to 2017",
@@ -649,26 +650,62 @@ combined_plot_data <- average_global_costs_uncor %>%
     cumulative_capacity = X) %>% 
   mutate(currency = factor(currency, plot_order_currency))
 
-combined_plots <- combined_plot_data %>% 
-  norm_average_costs() %>% 
-  mutate(year_for_text = if_else(currency == "GBP", as.character(year), "")) %>% 
-  get_normed_plots(intervals)
+combined_plot_norm_data <- combined_plot_data %>% 
+  filter(year == T0) %>% 
+  select(norm_costs = average_costs, currency)
+  
+normed_plot_data <- combined_plot_data %>% 
+  inner_join(combined_plot_norm_data, by = "currency") %>% 
+  mutate(normed_average_costs = average_costs / norm_costs) %>% 
+  arrange(currency, year)
 
+normed_plot_data_subsets <- list()
+for(i in seq_along(intervals)){
+  interval <- intervals[[i]]
+  interval_name <- names(intervals[i])
+  interval_years <- as.numeric(interval[1]):as.numeric(interval[2])
+  
+  x_for_abclabel <- normed_plot_data %>% 
+    filter(year %in% interval_years[[1]]) %>% 
+    pull(cumulative_capacity)
+  x_for_abclabel <- x_for_abclabel[[1]]/1000
+  
+  normed_plot_data_subsets[[i]] <- normed_plot_data %>% 
+    filter(year %in% interval_years) %>% 
+    add_column(interval = interval_name) %>% 
+    add_column(x_for_abclabel = !!x_for_abclabel)
+}
 
-combined_plots_legend <- combined_plots[[1]] +
-  theme(legend.position="bottom") +
-  guides(
-    col = guide_legend(nrow=1,byrow=TRUE),
-    linetype = guide_legend(nrow=1,byrow=TRUE))
+normed_plot_data_reduced <- normed_plot_data_subsets %>% 
+  reduce(bind_rows) %>% 
+  mutate(
+    interval = fct_relevel(interval, names(intervals)),
+    interval = fct_recode(interval,!!!plot_stips_label))
 
+plot_labels <- normed_plot_data_reduced %>% 
+  expand(interval) %>% 
+  add_column(label = letters[seq( from = 1, to = 3 )])
 
-plot_grid(
-  plot_grid(combined_plots[[1]] + theme(legend.position = "none"), 
-                   combined_plots[[2]] + theme(legend.position = "none"), 
-                   combined_plots[[3]] + theme(legend.position = "none"), labels = c("a", "b", "c"), 
-                   rel_widths = c(1,1,1), align = "h", ncol = 3),
-  get_legend(combined_plots_legend), rel_heights = c(5,1),
-  ncol = 1)
+normed_plot_data_reduced %>% 
+  mutate(year_for_text = if_else(currency == "GBP", str_sub(as.character(year), start = 3, end = 4) , "")) %>%
+  ggplot(aes(cumulative_capacity/1000, normed_average_costs)) +
+    geom_smooth(
+      aes(col = currency),
+      method="lm", formula = (y ~ x), se=FALSE) +
+    geom_point(aes(col = currency)) +
+    geom_text_repel(aes(label = year_for_text), vjust = -0.6, hjust = 0.1, size = 3, point.padding = NA) +
+    geom_text(data = plot_labels, mapping = aes(x = c(250,60,250), y = c(1.2,1.2,1.2), label = label), fontface = "bold") +
+
+    scale_x_continuous(trans="log", breaks = c(c(1,seq(2,10,2)) %o% 10^(0:4)), minor_breaks = 0.5) +
+    scale_y_continuous(trans="log", breaks = c(seq(0,1,0.1), seq(1.2,2,0.2)), minor_breaks = NULL) +
+    guides(
+      linetype = guide_legend(title="Learning rate"), 
+      col = guide_legend(title="Learning rate"), 
+      size = guide_legend(title="Type")) +
+    labs(x = "Cumulative capacity [GW]", 
+         y = paste0("Index of costs per MW")) +
+    scale_color_manual(values = plot_colours_currencies) +
+  facet_grid( ~ interval, scales = "free_x", space = "free_x")
 
 
 ```
@@ -919,7 +956,8 @@ combined_plot_data <-
   mutate(
     lr = round(replace_na(lr, replace = 0),digits = 1),
     diff = round(lr - corrected_lr, digits = 1),
-    diff_text = paste0(if_else(diff > 0, "+", ""), diff),
+    diff_text = paste0(if_else(diff > 0, "+", ""), diff)) %>% 
+  mutate(
     interval = fct_relevel(interval, names(intervals)),
     interval = fct_recode(interval,!!!plot_stips_label))
   
@@ -943,7 +981,7 @@ plot <- combined_plot_data %>%
     geom_text(. %>% filter(legend != ""), mapping = aes(y = lr/2, label = lr), col = "white", size = 3) + # learning rates
     geom_label_repel(. %>% filter(legend %in% relevant_currencies), mapping = aes(label = diff_text), nudge_y = 2, fill = "white", size = 3) + # differences
     
-    #geom_text(data = plot_labels, mapping = aes(x = 0.6, y = 43, label = label, interval = interval), fontface = "bold") +
+    geom_text(data = plot_labels, mapping = aes(x = 1, y = 40, label = label, fill = "USD"), fontface = "bold") +
 
     scale_fill_manual(values = c("fx-corrected (USD)" = "#000000", plot_colours_currencies)) +
     scale_y_continuous(limits = c(0,40), expand = expand_scale(mult = c(0, 0.1))) +

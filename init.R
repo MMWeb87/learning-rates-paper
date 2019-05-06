@@ -41,9 +41,9 @@ plot_order_country <- c("China", "Euro Area", "United Kingdom", "India", "Japan"
 plot_order_linetype <- c("dotdash", "longdash", "dashed", "dotted", "twodash", "solid")
 
 plot_stips_label <- c(
-"Full 10-year interval (2006-2016)" = "2006-2016",
-"First 5-year interval (2006-2011)" = "2006-2011",
-"Second 5-year interval (2011-2016)" = "2011-2016")
+"10-year interval (2006-2016)" = "2006-2016",
+"5-year interval (2006-2011)" = "2006-2011",
+"5-year interval (2011-2016)" = "2011-2016")
 
 
 # mypal = pal_npg("nrc")(length(relevant_currencies)) # colour are from here 
@@ -54,6 +54,15 @@ plot_colours_currencies <- c(
   "INR" = "#8491B4FF",
   "JPY" = "#F39B7FFF",
   "USD" = "#3C5488FF")
+
+plot_colours_country <- c(
+  "China" = "#E64B35FF",
+  "Euro Area" = "#4DBBD5FF",
+  "United Kingdom" = "#00A087FF",
+  "India" = "#8491B4FF",
+  "Japan" = "#F39B7FFF",
+  "United States" = "#3C5488FF",
+  "ROW" = "#AAAAAA")
 
 fig.width.baseline <- 7
 output.size <- 1.4

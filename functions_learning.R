@@ -210,7 +210,8 @@ get_normed_plots <- function(normed_plot_data, intervals){
         labs(x = "Cumulative capacity [GW]", 
              y = paste0("Index of costs per MW"),
              subtitle = interval_name) +
-        scale_color_npg()
+        scale_color_manual(values = plot_colours_currencies)
+      
   }
   
   return(plots)
@@ -223,7 +224,7 @@ get_delta_plot <- function(delta_data, plot_type = "combined", legend = FALSE){
                         aes(x = year, y = x/1000, fill = currency_area)) +
     geom_bar(stat = "identity") +
     scale_x_continuous(breaks = seq(2004, 2017, 1), minor_breaks = NULL) +
-    scale_fill_npg() +
+    scale_fill_manual(values = plot_colours_country) +
     labs(x = "", 
          y = paste0("Added PV capacity [GW]")) +
     guides(fill = guide_legend(title = "Currency area")) + 
@@ -233,7 +234,7 @@ get_delta_plot <- function(delta_data, plot_type = "combined", legend = FALSE){
                         aes(x = year, y = delta, fill = currency_area)) +
     geom_bar(position = "fill", stat="identity") +
     scale_x_continuous(breaks = seq(2004,2017,1), minor_breaks = NULL) +
-    scale_fill_npg() +
+    scale_fill_manual(values = plot_colours_country) +
     labs(x = "", 
          y = paste0("Share of added PV capacity")) +
     guides(fill=guide_legend(title="Currency area")) +
@@ -390,18 +391,9 @@ convert_location_to_currency <- function(location){
 #' Used to produce the nomred plots
 #'
 #' @param costs_and_capacity dataframe including currency, average costs and capacity fields
-norm_average_costs <- function(costs_and_capacity){
+norm_average_costs <- function(dcosts_and_capacity){
   
-  combined_plot_norm_data <- costs_and_capacity %>% 
-    filter(year == T0) %>% 
-    select(norm_costs = average_costs, currency)
-  
-  combined_plot_data %>% 
-    inner_join(combined_plot_norm_data, by = "currency") %>% 
-    mutate(normed_average_costs = average_costs / norm_costs) %>% 
-    arrange(currency, year)
-  
-  
+
 }
 
 

@@ -46,7 +46,6 @@ all_learnig_rates_results <- list()
 for(currency in relevant_currencies){
   all_learnig_rates_results[[paste(currency,"real")]]  <- read_csv(paste0("output/results/learning_rate_results_",currency,"_real.csv"))
   all_learnig_rates_results[[paste(currency,"nominal")]]  <- read_csv(paste0("output/results/learning_rate_results_",currency,"_nominal.csv"))
-
 }
 
 all_results <- all_learnig_rates_results %>%   
