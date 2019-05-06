@@ -22,6 +22,7 @@ if(exists("params")){
 
 # These currencies need to be in the currency_translation table
 relevant_currencies <- c("CNY", "EUR", "GBP", "INR", "JPY", "USD")
+
 relevant_deflators <- c("CHN", "EA19", "GBR", "IND", "JPN", "USA")
 
 intervals <- list(
@@ -32,11 +33,18 @@ intervals <- list(
 
 # Tables
 table_order_currency <- c("USD", "EUR", "JPY", "CNY", "INR", "GBP")
+table_order_currency <- relevant_currencies
 
 # Plots
 plot_order_currency <- relevant_currencies
 plot_order_country <- c("China", "Euro Area", "United Kingdom", "India", "Japan", "United States", "ROW")
 plot_order_linetype <- c("dotdash", "longdash", "dashed", "dotted", "twodash", "solid")
+
+plot_stips_label <- c(
+"Full 10-year interval (2006-2016)" = "2006-2016",
+"First 5-year interval (2006-2011)" = "2006-2011",
+"Second 5-year interval (2011-2016)" = "2011-2016")
+
 
 # mypal = pal_npg("nrc")(length(relevant_currencies)) # colour are from here 
 plot_colours_currencies <- c(
@@ -45,8 +53,7 @@ plot_colours_currencies <- c(
   "GBP" = "#00A087FF",
   "INR" = "#8491B4FF",
   "JPY" = "#F39B7FFF",
-  "USD" = "#3C5488FF"
-)
+  "USD" = "#3C5488FF")
 
 fig.width.baseline <- 7
 output.size <- 1.4

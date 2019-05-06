@@ -27,7 +27,7 @@ params:
 
 ```{r setup, include=FALSE}
 
-remove(list = ls()[ls() != "params"])
+#remove(list = ls()[ls() != "params"])
 
 library(knitr)
 library(ggsci)
@@ -58,8 +58,8 @@ knitr::opts_chunk$set(
   out.width=out.width.default)
 
 theme_set(theme_bw(base_size = 9.5) + theme(
-  legend.title=element_blank()),
-  legend.spacing.x = unit(0.1, 'cm'))
+  legend.title=element_blank(),
+  legend.spacing.x = unit(0.1, 'cm')))
 
 ```
 
@@ -498,15 +498,15 @@ X <- X_all_subsets %>%
 
 We calculate 3 types of average costs and learning rates in this file:
 
-- uncorrected learning rates
-- uncorrected-weighted learning rates
-- corrected learing
+- uncorrected_project_weighted learning rates
+- uncorrected_markted_weighted learning rates
+- corrected_markted_weighted learing
 
 For a detailed explanation of the theories behind the learning rates calculations and currency corrections, compare our paper.
 
-## Method 1: Calculation of the uncorrected learning rates 
+## Method 1: Calculation of the uncorrected_project_weighted learning rates 
 
-To calculate the uncorrected learning rates, we convert **all available project costs** to different currencies. We then derive the learning rate for each currency from the global average costs $C_{global,t,2017}^{i}$ of all available projects.
+To calculate the uncorrected_project_weighted learning rates, we convert **all available project costs** to different currencies. We then derive the learning rate for each currency from the global average costs $C_{global,t,2017}^{i}$ of all available projects.
 
 In Table 1 & 2 and Figure 1, we present the results of the method 1 approach.
 
@@ -519,7 +519,7 @@ results <- list()
 ### Step 1: Calculation of costs in every relevant currency
 In the first step, we calculate the value for each project in each relevant currency (`r currencies_print`).
 
-```{r Calculate uncorrected learning rates}
+```{r Calculate uncorrected_project_weighted learning rates}
 
 projects_with_costs_in_currencies <- projects_with_costs_in_interval
 
@@ -582,12 +582,6 @@ We calculate the learning rate in each interval and for each currency using a li
 
 ```{r Calculation of learning rates}
 
-simple_learning_rates_matrix <- matrix(
-  ncol = length(intervals), 
-  nrow = length(relevant_currencies))
-
-simple_learning_rates_rsquared_matrix <- simple_learning_rates_matrix
-
 results_list <- list()
 
 for(j in seq_along(relevant_currencies)){
@@ -608,6 +602,8 @@ for(j in seq_along(relevant_currencies)){
     
     l <- calculate_learning_rate(regression_costs, regression_cumulative_capacity)
     
+    results_list[[paste0(currency,interval_name)]] <- to_results_list(l, currency, interval_name)
+
     debug_prefix <- paste0(interval_name, "_", "simple","_")
 
     write_debug_information(tibble(
@@ -616,23 +612,13 @@ for(j in seq_along(relevant_currencies)){
         currency = currency), 
       paste0(debug_prefix, "regression_costs_",currency))
     
-    results_list[[paste(currency, interval_name)]] <- tibble(
-      currency = currency,
-      interval = interval_name,
-      estimate = l$learning_rate,
-      CI = str_glue("[{l$confint_lower};{l$confint_upper}]"),
-      R2 =  l$rsquared
-    )
-    
-    simple_learning_rates_matrix[j,i] <- l$learning_rate
-    simple_learning_rates_rsquared_matrix[j,i] <- l$rsquared
-    
   }
 }
 
 
-results_new[["simple_learning_rates"]] <- results_list %>% 
+results_new[["uncorrected_project_weighted"]] <- results_list %>% 
   reduce(bind_rows) %>% 
+  add_column(type = factor("uncorrected_project_weighted")) %>% 
   arrange_by_currencies(table_order_currency)
 
 rm(currency, results_list)
@@ -643,22 +629,7 @@ rm(currency, results_list)
 
 ```{r Learning rate table, fig.cap="Simple learning rates in different intervals.", fig.width=fig.width.baseline * 0.7, fig.asp= 0.7}
 
-print_learning_rates_result(results_new[["simple_learning_rates"]])
-
-
-results[["simple_learning_rates"]] <- simple_learning_rates_matrix %>% 
-  matrix_to_tibble(names(intervals), relevant_currencies, "currency") %>% 
-  arrange_by_currencies(table_order_currency)
-
-results[["simple_learning_rates_rsquared"]] <- simple_learning_rates_rsquared_matrix %>% 
-  matrix_to_tibble(names(intervals), relevant_currencies, "currency") %>% 
-  arrange_by_currencies(table_order_currency)
-
-
-
-# print_learning_rates_result(
-#   results[["simple_learning_rates"]], results[["simple_learning_rates_rsquared"]], 
-#   "currency", "Simple learning rates in all currencies")
+print_learning_rates_result(results_new[["uncorrected_project_weighted"]])
 
 ```
 
@@ -710,7 +681,7 @@ We calculate our improved currency-corrected learning rate in the lead currency 
 
 ### Step 1: Marketshare calculation
 
-A notable difference to the uncorrected learning rate method, is that we weighting the average global costs by the marketshares $\delta$. For those, we have two datasource. (1) BNEF which is also used to calculate the learning rates and (2) IRENA. The IRENA data represents more capacity and is a better measure of the global market shares.
+A notable difference to the uncorrected_project_weighted learning rate method, is that we weighting the average global costs by the marketshares $\delta$. For those, we have two datasource. (1) BNEF which is also used to calculate the learning rates and (2) IRENA. The IRENA data represents more capacity and is a better measure of the global market shares.
 
 ```{r Calculation of market shares}
 
@@ -795,8 +766,8 @@ The table shows which currency have average_local_costs in which year.
 
 In the third step, we aggregate the data by yearly averages for each currency. The mean is weighted by the marketshare $\delta$ (in contrast to method 1). We calculate two different $P$: 
 
-- $P$ for the uncorrected-weighted average global costs
-- $P_{tilde}$ for the corrected average global costs
+- $P$ for the uncorrected_markted_weighted average global costs
+- $P_{tilde}$ for the corrected_markted_weighted average global costs
 
 ```{r Calculation of the weighted average global cost P}
 
@@ -861,21 +832,19 @@ P_tilde <- convert_to_real_costs(P_tilde, defl)
 
 ### Step 5: Calculation of the learning rate
 
-A regression over $P_{t,2017}^l$ gives us the **un**corrected global learning rates in `r lead_currency`,. The **un**corrected rate includes both technological learning and changes in exchange rates. Therefore, it is different in different lead currencies. To get the same number in every lead currency (i.e. a truly global learning rate), we adjust the uncorrected-weighted global learning rate for the currency effect. Applying $\alpha$ to the learning rate calculation results in the corrected global learning rate. The corrected rate only includes technological learning.
+A regression over $P_{t,2017}^l$ gives us the **un**corrected global learning rates in `r lead_currency`,. The **un**corrected rate includes both technological learning and changes in exchange rates. Therefore, it is different in different lead currencies. To get the same number in every lead currency (i.e. a truly global learning rate), we adjust the uncorrected_markted_weighted global learning rate for the currency effect. Applying $\alpha$ to the learning rate calculation results in the corrected global learning rate. The corrected rate only includes technological learning.
 
-```{r Calculation of uncorrected-weighted and corrected learning rate}
+```{r Calculation of uncorrected_markted_weighted and corrected_markted_weighted learning rate}
 
-corrected_learning_rates_list <- list()
-corrected_learning_rates_rsquared_list <- list()
+types <- c("uncorrected_markted_weighted","corrected_markted_weighted")
 
-types <- c("uncorrected-weighted","corrected")
-
-results_list <- list()
+results_list <- list(
+  "uncorrected_markted_weighted" <- list(),
+  "corrected_markted_weighted" <- list()
+)
 
 
 for(type in types){
-  corrected_learning_rates_list[[type]] <- list()
-  corrected_learning_rates_rsquared_list[[type]] <- list()
   
   for(i in 1:length(intervals)){
     interval <- intervals[[i]]
@@ -883,7 +852,7 @@ for(type in types){
     interval_years <- as.numeric(interval[1]):as.numeric(interval[2])
     interval_name <- names(intervals[i])
     
-    if(type == "uncorrected-weighted"){
+    if(type == "uncorrected_markted_weighted"){
       relevant_P <- P
     } else {
       relevant_P <- P_tilde
@@ -899,57 +868,35 @@ for(type in types){
     
     l <- calculate_learning_rate(regression_costs, regression_cumulative_capacity)
     
-    results_list[[paste(type, interval_name)]] <- tibble(
-      type = type,
-      interval = interval_name,
-      estimate = l$learning_rate,
-      CI = str_glue("[{l$confint_lower};{l$confint_upper}]"),
-      R2 =  l$rsquared
-    )
-    
+    results_list[[type]][[interval_name]] <- to_results_list(l, lead_currency, interval_name)
+
     debug_prefix <- paste0(interval_name, "_", type,"_")
     
     write_debug_information(tibble(
       costs = regression_costs, 
       capacity = regression_cumulative_capacity), paste0(debug_prefix, "regression_costs"))
-
-    corrected_learning_rates_list[[type]][[interval_name]] <- l$learning_rate
-    corrected_learning_rates_rsquared_list[[type]][[interval_name]] <- l$rsquared
-    
   }
+  
+  results_new[[type]] <- results_list[[type]] %>% 
+      reduce(bind_rows) %>% 
+      add_column(type = factor(type)) 
 }
-
-
-results_new[["corrected_learning_rates"]] <- results_list %>% 
-  reduce(bind_rows)
 
 rm(results_list)
 ```
 
 ## Method 2: Results
 
-We get the following learning rates using the corrected learning rates approach:
+We get the following learning rates using the corrected_markted_weighted learning rates approach:
 
 ```{r Results table}
 
-print_learning_rates_result(results_new[["corrected_learning_rates"]])
-
-
-results[["corrected_learning_rates"]] <- corrected_learning_rates_list %>% 
-  nested_list_to_matrix() %>% 
-  matrix_to_tibble(names(intervals), types, "type")
-
-results[["corrected_learning_rates_rsquared"]] <- corrected_learning_rates_rsquared_list %>% 
-  nested_list_to_matrix() %>% 
-  matrix_to_tibble(names(intervals), types, "type")
-
-#print_learning_rates_result(
-#  results[["corrected_learning_rates"]], results[["corrected_learning_rates_rsquared"]], 
-#  "type", paste("Global learning rates in lead currency", lead_currency))
+print_learning_rates_result(results_new[["uncorrected_markted_weighted"]])
+print_learning_rates_result(results_new[["corrected_markted_weighted"]])
 
 ```
 
-## Combined plot of simple and corrected learning rates
+## Combined plot of simple and corrected_markted_weighted learning rates
 
 Comparison with the simple learning rates for every country
 
@@ -957,108 +904,74 @@ Comparison with the simple learning rates for every country
 
 mypal = pal_npg("nrc")(length(relevant_currencies))
 
-corrected_rates <- results_new$corrected_learning_rates %>% 
-  filter(type == "corrected") %>%
+corrected_rates <- results_new$corrected_markted_weighted %>% 
   select(corrected_lr = estimate, interval)
 
-combined_plot_data <- bind_rows(
-    results$corrected_learning_rates %>% 
-      filter(type == "corrected") %>% 
-      add_column(currency = "fx-corrected"),
-    results$simple_learning_rates %>% 
-      add_column(type = "uncorrected")
+combined_plot_data <-
+  bind_rows(
+    results_new$corrected_markted_weighted %>% 
+      add_column(legend = factor("fx-corrected (USD)")),
+    results_new$uncorrected_project_weighted %>% 
+      mutate(legend = currency)
     ) %>% 
-  add_row(currency = "", type = "placeholder", .after = 1) %>% 
-  gather(key = "interval", value = "lr", contains("-")) %>% 
+  rename(lr = estimate) %>%  
   left_join(corrected_rates, by = c("interval")) %>% 
   mutate(
     lr = round(replace_na(lr, replace = 0),digits = 1),
     diff = round(lr - corrected_lr, digits = 1),
     diff_text = paste0(if_else(diff > 0, "+", ""), diff),
     interval = fct_relevel(interval, names(intervals)),
-    currency = fct_relevel(currency, "fx-corrected", after = 0)) 
-
-plots <- list()
-
-for(i in seq_along(intervals)){
+    interval = fct_recode(interval,!!!plot_stips_label))
   
-  interval <- intervals[[i]]
-  interval_name <- names(intervals[i])
-  interval_years <- as.numeric(interval[1]):as.numeric(interval[2])
+plot_factors <- c("fx-corrected (USD)","",table_order_currency)
 
-  corrected_rate <- corrected_rates %>% 
-    filter(interval == interval_name) %>% 
-    pull(corrected_lr)
-  
-  plots[[interval_name]] <- combined_plot_data %>% 
-    filter(interval == interval_name) %>% 
-    ggplot(aes(fill = currency, y = lr, x = currency)) + 
-      geom_bar(position="dodge", stat="identity") +
-      geom_hline(yintercept = corrected_rate) + 
-      geom_segment(. %>% filter(currency %in% relevant_currencies), mapping=aes(x = currency, xend=currency, y = corrected_lr, yend=lr), 
-                   arrow = arrow(length = unit(0.05, "inches"), type = "closed"), 
-                   size = 1, color="black") +
-      geom_text(. %>% filter(currency != ""), mapping = aes(y = lr/2, label = lr), col = "white", size = 3) + # learning rates
-      geom_label_repel(. %>% filter(currency %in% relevant_currencies), mapping = aes(label = diff_text), nudge_y = 2, fill = "white", size = 3) + # differences
-      scale_fill_manual(values = c("#000000", "white", mypal)) +
-      scale_y_continuous(limits = c(0,40), expand = expand_scale(mult = c(0, 0.1))) +
-      labs(
-        subtitle = interval_name, y = paste0("Learning rate in %")) +
-      theme(
-        axis.title.x = element_blank(),
-        axis.text.x=element_blank(),
-        axis.ticks.x=element_blank(), 
-        panel.grid.major = element_blank())
-}
+plot_labels <- combined_plot_data %>% 
+  expand(interval) %>% 
+  add_column(label = letters[seq( from = 1, to = 3 )])
 
-# TODO: integrate in get_legend function
-plot_legend <- plots[[1]] +
-  theme(legend.position="bottom") +
-  guides(
-    fill = guide_legend(nrow=1,byrow=TRUE))
+plot <- combined_plot_data %>% 
+  mutate(legend = factor(legend, plot_factors),
+         legend = fct_relevel(legend, plot_factors)) %>% 
 
-plot_grid(
-  plot_grid(plots[[1]] + theme(legend.position = "none"), 
-                   plots[[2]] + theme(legend.position = "none"), 
-                   plots[[3]] + theme(legend.position = "none"), labels = c("a", "b", "c"), 
-                   rel_widths = c(1,1,1), align = "h", ncol = 3),
-  get_legend(plot_legend), rel_heights = c(5,1),
-  ncol = 1)
+  ggplot(aes(fill = legend, y = lr, x = legend)) + 
+    geom_bar(position="dodge", stat="identity") +
+    geom_hline(aes(yintercept = corrected_lr)) + 
+    geom_segment(. %>% filter(legend %in% relevant_currencies), 
+                 mapping=aes(x = legend, xend = legend, y = corrected_lr, yend=lr), 
+                 arrow = arrow(length = unit(0.05, "inches"), type = "closed"), 
+                 size = 1, color="black") +
+    geom_text(. %>% filter(legend != ""), mapping = aes(y = lr/2, label = lr), col = "white", size = 3) + # learning rates
+    geom_label_repel(. %>% filter(legend %in% relevant_currencies), mapping = aes(label = diff_text), nudge_y = 2, fill = "white", size = 3) + # differences
+    
+    #geom_text(data = plot_labels, mapping = aes(x = 0.6, y = 43, label = label, interval = interval), fontface = "bold") +
 
+    scale_fill_manual(values = c("fx-corrected (USD)" = "#000000", plot_colours_currencies)) +
+    scale_y_continuous(limits = c(0,40), expand = expand_scale(mult = c(0, 0.1))) +
+    scale_x_discrete(drop = FALSE) +
+    labs(
+      y = paste0("Learning rate in %")) +
+    theme(
+      axis.title.x = element_blank(),
+      axis.text.x=element_blank(),
+      axis.ticks.x=element_blank(), 
+      panel.grid.major = element_blank(),
+      legend.position="bottom") +
+    guides(
+      fill = guide_legend(nrow=1,byrow=TRUE)) +
+  facet_grid( ~ interval)
+
+
+plot
 
 ```
 
 ```{r Save results to csv}
 
-if(!params$run_test){
+results_new %>% 
+  reduce(bind_rows) %>% 
+  add_column(version = version) %>% 
+  write_csv(paste0("output/results/learning_rate_results_",params$lead_currency,"_",version,".csv"))
 
-  
-  # simple learning rates
-  r1 <- results$simple_learning_rates %>% 
-    gather(starts_with('2'), key = interval, value = rate) 
-  
-  r2 <- results$simple_learning_rates_rsquared %>% 
-    gather(starts_with('2'), key = interval, value = rsquared)
-  
-  lr_result_1 <- left_join(r1, r2, by = c("currency", "interval")) %>% 
-      add_column(type = "uncorrected")
-  
-  # corrected learning rates
-  r1 <- results$corrected_learning_rates %>%
-    gather(starts_with('2'), key = interval, value = rate) 
-  
-  r2 <- results$corrected_learning_rates_rsquared %>%
-    gather(starts_with('2'), key = interval, value = rsquared)
-  
-  lr_result_2 <- left_join(r1, r2, by = c("interval", "type")) %>% 
-    add_column(currency = params$lead_currency) 
-  
-  
-  bind_rows(lr_result_1,lr_result_2) %>% 
-    add_column(version = version) %>% 
-    write_csv(paste0("output/results/learning_rate_results_",params$lead_currency,"_",version,".csv"))
-
-}
 
 ```
 

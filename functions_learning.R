@@ -39,6 +39,26 @@ calculate_learning_rate <- function(costs, cumulative_capacity, digits = params$
   
 }
 
+#' Converts results from calculate_learning_rate to list for further processing
+#'
+#' @param l 
+#'
+#' @return
+#' @export
+#'
+#' @examples
+to_results_list <- function(l, currency, interval_name){
+  
+  tibble(
+    currency = currency,
+    interval = interval_name,
+    estimate = l$learning_rate,
+    CI = str_glue("[{l$confint_lower};{l$confint_upper}]"),
+    R2 =  l$rsquared
+  )
+  
+}
+
 
 #' Calculate_cummulative_sums
 #' 
@@ -365,23 +385,6 @@ convert_location_to_currency <- function(location){
   return(currency)
   
 } 
-
-
-
-matrix_to_tibble <- function(matrix, colnames, groups, group_name){
-  
-  matrix <- as.data.frame(matrix)
-  colnames(matrix) <- colnames
-  
-  as_tibble(matrix) %>% 
-    add_column(group = groups) %>% 
-    select(!!quo_name(group_name) := group, everything())
-}
-
-# turns a nested list of lists into a matrix with as many rows as objects in the first level are
-nested_list_to_matrix <- function(list){
-  matrix(unlist(list), nrow = length(list), byrow = TRUE)
-}
 
 #' Norm average cost
 #' Used to produce the nomred plots
