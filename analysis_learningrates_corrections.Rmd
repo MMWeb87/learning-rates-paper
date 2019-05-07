@@ -732,6 +732,23 @@ if(params$capacity_data == "IRENA"){
   delta <- delta_BNEF
 }
 
+
+# calculation of count based calculation
+
+delta_project_weighted <- left_join(
+  projects_with_costs_in_interval %>% 
+    group_by(year, local_currency) %>% 
+    summarise(n = n()),
+  
+  projects_with_costs_in_interval %>% 
+    group_by(year) %>% 
+    summarise(n_tot = n())
+) %>% 
+  mutate(delta = n/n_tot) %>% 
+  rename(currency = local_currency) %>% 
+  complete(year, currency) %>% 
+  replace_na(replace = list(n = 0, n_tot = 0, delta = 0))
+
 ```
 
 
@@ -831,18 +848,23 @@ P_comp <- tibble(
 ) %>% inner_join(defl, by = c("currency", "year"))
 
 P_comp_tilde <- P_comp
+P_comp_pwt <- P_comp
 
 for(t in all_years){
   
   for(i in relevant_currencies){
 
-    delta_i_t <- filter(delta, year == t, currency == i) %>% pull(delta)
     w_i_t <- filter(exchange_rates_per_year, year == t, currency == i) %>% pull(rate)
     w_i_0 <- filter(exchange_rates_per_year, year == T0, currency == i) %>% pull(rate)
     C_i_t <- filter(C, year == t, currency == i) %>% pull(C)
     
+    mu_i_t <- filter(delta_project_weighted, year == t, currency == i) %>% pull(delta)
+    P_comp_pwt[P_comp_pwt$year == t & P_comp_pwt$currency == i, "nominal_costs"] <- mu_i_t * w_i_t * C_i_t
+
+    delta_i_t <- filter(delta, year == t, currency == i) %>% pull(delta)
     P_comp[P_comp$year == t & P_comp$currency == i, "nominal_costs"] <- delta_i_t * w_i_t * C_i_t
     P_comp_tilde[P_comp$year == t & P_comp$currency == i, "nominal_costs"] <- delta_i_t * w_i_0 * C_i_t
+    
 
   }
   
@@ -850,9 +872,11 @@ for(t in all_years){
 
 write_debug_information(P_comp, paste0("P_comp_nominal"))
 
-P <- calculate_P(P_comp)
-P_tilde <- calculate_P(P_comp_tilde)
+P <- list()
 
+P[["uncorrected_project_weighted2"]] <- calculate_P(P_comp_pwt) #P_pw
+P[["uncorrected_markted_weighted"]] <- calculate_P(P_comp) # P 
+P[["corrected_markted_weighted"]] <- calculate_P(P_comp_tilde) # P_tilde  
 
 ```
 
@@ -863,8 +887,9 @@ We defalte after the currency conversion. I.e. the learning rates of multiple ba
 Only if params\$deflate is true. Currently: `r params$deflate`
 
 ```{r}
-P <- convert_to_real_costs(P, defl)
-P_tilde <- convert_to_real_costs(P_tilde, defl)
+
+P <- map(P, convert_to_real_costs, defl)
+
 ```
 
 
@@ -874,9 +899,13 @@ A regression over $P_{t,2017}^l$ gives us the **un**corrected global learning ra
 
 ```{r Calculation of uncorrected_markted_weighted and corrected_markted_weighted learning rate}
 
-types <- c("uncorrected_markted_weighted","corrected_markted_weighted")
+types <- c(
+  "uncorrected_project_weighted2",
+  "uncorrected_markted_weighted",
+  "corrected_markted_weighted")
 
 results_list <- list(
+  "uncorrected_project_weighted2" <- list(),
   "uncorrected_markted_weighted" <- list(),
   "corrected_markted_weighted" <- list()
 )
@@ -890,13 +919,7 @@ for(type in types){
     interval_years <- as.numeric(interval[1]):as.numeric(interval[2])
     interval_name <- names(intervals[i])
     
-    if(type == "uncorrected_markted_weighted"){
-      relevant_P <- P
-    } else {
-      relevant_P <- P_tilde
-    }
-    
-    regression_costs <- relevant_P %>% 
+    regression_costs <- P[[type]] %>% 
       filter(year %in% interval_years) %>% 
       pull(average_costs)
     
@@ -928,6 +951,9 @@ rm(results_list)
 We get the following learning rates using the corrected_markted_weighted learning rates approach:
 
 ```{r Results table}
+
+print_learning_rates_result(results_new[["uncorrected_project_weighted"]])
+print_learning_rates_result(results_new[["uncorrected_project_weighted2"]])
 
 print_learning_rates_result(results_new[["uncorrected_markted_weighted"]])
 print_learning_rates_result(results_new[["corrected_markted_weighted"]])
@@ -1009,7 +1035,7 @@ plot
 results_new %>% 
   reduce(bind_rows) %>% 
   add_column(version = version) %>% 
-  write_csv(paste0("output/results/learning_rate_results_",params$lead_currency,"_",version,".csv"))
+  write_csv(paste0("output/results/test_learning_rate_results_",params$lead_currency,"_",version,".csv"))
 
 
 ```
