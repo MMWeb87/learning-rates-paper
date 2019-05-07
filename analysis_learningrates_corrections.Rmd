@@ -551,7 +551,7 @@ projects_with_costs_in_currencies
 
 ```
 
-### Step 2. Aggregate data to means and deflate
+### Step 2. Aggregate data to means
 
 In the second step, we aggregate the data by yearly averages for each currency. The mean is a not weighted (in contrast to method 2) average of all projects.
 
@@ -698,9 +698,10 @@ normed_plot_data_reduced %>%
 
     scale_x_continuous(trans="log", breaks = c(c(1,seq(2,10,2)) %o% 10^(0:4)), minor_breaks = 0.5) +
     scale_y_continuous(trans="log", breaks = c(seq(0,1,0.1), seq(1.2,2,0.2)), minor_breaks = NULL) +
+    theme(legend.position="bottom") +
     guides(
-      linetype = guide_legend(title="Learning rate"), 
-      col = guide_legend(title="Learning rate"), 
+      linetype = guide_legend(title="Learning rate", nrow = 1), 
+      col = guide_legend(title="Learning rate", nrow = 1), 
       size = guide_legend(title="Type")) +
     labs(x = "Cumulative capacity [GW]", 
          y = paste0("Index of costs per MW")) +
