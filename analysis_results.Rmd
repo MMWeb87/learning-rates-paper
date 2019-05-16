@@ -52,12 +52,12 @@ all_results <- all_learnig_rates_results %>%
   reduce(bind_rows) %>% 
   distinct() %>% 
   mutate(
-    type = fct_relevel(type, "uncorrected_project_weighted", "uncorrected_markted_weighted", "corrected_markted_weighted"),
+    type = fct_relevel(type, "uncorrected_project_weighted", "uncorrected_marketshare_weighted", "corrected_marketshare_weighted"),
     type_label = type,
     type_label = fct_recode(type_label,
        "Uncorrected \n project-wt." = "uncorrected_project_weighted",
-       "Uncorrected \n market share-wt." = "uncorrected_markted_weighted",
-       "Fx-corrected \n market share-wt." = "corrected_markted_weighted"),
+       "Uncorrected \n market share-wt." = "uncorrected_marketshare_weighted",
+       "Fx-corrected \n market share-wt." = "corrected_marketshare_weighted"),
     interval = fct_relevel(interval, factor_order_intervals),
     interval = fct_recode(interval,!!!plot_stips_label)
     ) %>% 
