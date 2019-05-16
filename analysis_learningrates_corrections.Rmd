@@ -1005,8 +1005,10 @@ plot
 
 ```{r Save results to csv}
 
+
 results_new %>% 
   reduce(bind_rows) %>% 
+  filter(type!="uncorrected_project_weighted2") %>% 
   add_column(version = version) %>% 
   write_csv(paste0("output/results/learning_rate_results_",params$base_currency,"_",version,".csv"))
 
