@@ -128,10 +128,10 @@ calculate_P <- function(P_component){
   # calculate weighted average global cost converted to lead currency l in year t
   
   P_comp_sum <- P_component %>% 
-    group_by(year, lead_currency) %>% 
+    group_by(year, base_currency) %>% 
     summarise(P_nominal = sum(nominal_costs))
   
-  select(P_comp_sum, year, currency = lead_currency, nominal_costs = P_nominal)
+  select(P_comp_sum, year, currency = base_currency, nominal_costs = P_nominal)
   
 }
 
@@ -150,16 +150,16 @@ get_exchange_rate_for_project <- function(exchange_rate_data, project_year, proj
 #'
 #' @param exchange_rates a dataframe with exchange rates of a lead currency to other currencies 
 #' @param other_currency_to_ref_currency_er name of the other currency (same as in dataframe) 
-#' @param lead_currency_to_ref_currency_er name of the lead currency (same as in dataframe) 
+#' @param base_currency_to_ref_currency_er name of the lead currency (same as in dataframe) 
 #'
 #' @return
 #' @export
 #'
 #' @examples
-convert_exchange_rate <- function(exchange_rates_data, lead_currency, other_currency){
+convert_exchange_rate <- function(exchange_rates_data, base_currency, other_currency){
   
-  # the formula is c_other_curreny/c_lead_currency = c_other_currency/USD * (c_lead_currency/USD)^-1
-  exchange_rates_data[other_currency] * as_tibble(exchange_rates_data[lead_currency]^(-1))
+  # the formula is c_other_curreny/c_base_currency = c_other_currency/USD * (c_base_currency/USD)^-1
+  exchange_rates_data[other_currency] * as_tibble(exchange_rates_data[base_currency]^(-1))
   
   
 }
@@ -405,7 +405,7 @@ write_debug_information <- function(data, title){
   if(params$debug){
     data <- as_tibble(data)
     
-    directory <- paste0("output/debug/", params$lead_currency, "/")
+    directory <- paste0("output/debug/", params$base_currency, "/")
     filename <- paste0(title, ".csv")
     
     dir.create(directory)
