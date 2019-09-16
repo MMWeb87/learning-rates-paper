@@ -169,6 +169,72 @@ convert_exchange_rate <- function(exchange_rates_data, base_currency, other_curr
 # Plot functions -----------------------------------------------------------
 
 
+#' Get comparison plot that compares two types of learning rates.
+#' Depends on what's in the df.
+#'
+#' @param df 
+#'
+#' @return
+#' @export
+#'
+#' @examples
+get_comparison_plot <- function(df, corrected_rates){
+  
+  combined_plot_data <- df %>% 
+    rename(lr = estimate) %>%  
+    left_join(corrected_rates, by = c("interval")) %>% 
+    mutate(
+      lr = round(replace_na(lr, replace = 0),digits = 1),
+      diff = round(lr - corrected_lr, digits = 1),
+      diff_text = paste0(if_else(diff > 0, "+", ""), diff)) %>% 
+    mutate(
+      interval = fct_relevel(interval, names(intervals)),
+      interval = fct_recode(interval,!!!plot_stips_label))
+  
+  
+  plot_factors <- c("fx-corrected (USD)","",table_order_currency)
+  
+  plot_labels <- combined_plot_data %>% 
+    expand(interval) %>% 
+    add_column(label = letters[seq( from = 1, to = 3 )])
+  
+  plot <- combined_plot_data %>% 
+    mutate(legend = factor(legend, plot_factors),
+           legend = fct_relevel(legend, plot_factors)) %>% 
+    
+    ggplot(aes(fill = legend, y = lr, x = legend)) + 
+    geom_bar(position="dodge", stat="identity") +
+    geom_hline(aes(yintercept = corrected_lr)) + 
+    geom_segment(. %>% filter(legend %in% relevant_currencies), 
+                 mapping=aes(x = legend, xend = legend, y = corrected_lr, yend=lr), 
+                 arrow = arrow(length = unit(0.05, "inches"), type = "closed"), 
+                 size = 1, color="black") +
+    geom_text(. %>% filter(legend != ""), mapping = aes(y = lr/2, label = lr), col = "white", size = 3) + # learning rates
+    geom_label_repel(. %>% filter(legend %in% relevant_currencies), mapping = aes(label = diff_text), nudge_y = 2, fill = "white", size = 3) + # differences
+    
+    geom_text(data = plot_labels, mapping = aes(x = 1, y = 40, label = label, fill = "USD"), fontface = "bold") +
+    
+    scale_fill_manual(values = c("fx-corrected (USD)" = "#000000", plot_colours_currencies)) +
+    scale_y_continuous(limits = c(0,40), expand = expand_scale(mult = c(0, 0.1))) +
+    scale_x_discrete(drop = FALSE) +
+    labs(
+      y = paste0("Learning rate in %")) +
+    theme(
+      axis.title.x = element_blank(),
+      axis.text.x=element_blank(),
+      axis.ticks.x=element_blank(), 
+      panel.grid.major = element_blank(),
+      legend.position="bottom") +
+    guides(
+      fill = guide_legend(nrow=1,byrow=TRUE)) +
+    facet_grid( ~ interval)
+  
+  
+  plot
+  
+}
+
+
 #' Get normed plot
 #' Produces the learning rate plots. In
 #'

@@ -100,6 +100,44 @@ all_learnig_rates_results_plot
 ```
 
 
+## Combined plot of simple and corrected_marketshare_weighted learning rates
+
+Comparison with the simple learning rates for every country
+
+```{r Combined plot, fig.cap="Learning rates plot", fig.asp=0.4}
+
+#mypal = pal_npg("nrc")(length(relevant_currencies))
+
+all_results_for_combined_plot <- all_results %>% 
+  filter(version == "real")
+
+# comparision currency (USD)
+corrected_rates <- all_results_for_combined_plot %>% 
+  filter(
+    currency == "USD",
+    type == "corrected_marketshare_weighted") %>% 
+  select(corrected_lr = estimate, interval)
+
+
+bind_rows(
+  all_results_for_combined_plot %>% 
+    filter(
+      currency == "USD",
+      type == "corrected_marketshare_weighted") %>% 
+    add_column(legend = factor("fx-corrected (USD)")),
+  all_results_for_combined_plot %>% 
+    filter(
+      type == "uncorrected_marketshare_weighted") %>% 
+    mutate(legend = currency)
+  ) %>% 
+  get_comparison_plot(corrected_rates)
+
+
+```
+
+
+
+
 ```{r summary table}
 
 all_types <- all_results$type %>% levels()
