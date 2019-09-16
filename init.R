@@ -5,7 +5,8 @@ filenames <- list(
   irena_data = "input/irena-capacity-generation.csv",
   exchange_rates = "input/USD_exchange_rates.csv",
   deflators = "input/OECD_CPI_yearly.csv",
-  currency_to_currency_area_translation = "input/currency_to_currency_area_translation.csv",
+  inflation = "input/OECD_CPI_yearly.csv",
+    currency_to_currency_area_translation = "input/currency_to_currency_area_translation.csv",
   country_to_currency_translation = "input/country_to_currency_translation.csv",
   long_to_short_currencycode_translation = "input/currency_translation.csv",
   outliers = "input/outliers.csv"
