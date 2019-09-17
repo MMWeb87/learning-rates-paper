@@ -496,8 +496,8 @@ inflator_plot <- cpi_inflator %>%
   ggplot(aes(year, rate, col = currency_area, linetype = currency_area)) + 
     geom_line() + 
     scale_linetype_manual(values=plot_order_linetype) +
-    scale_colour_manual(values = plot_colours_country) +
-  
+    scale_colour_manual(values = plot_colours_country) + 
+    scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
     labs(
       x = "Year",
       y = "Inflation rates"
@@ -543,234 +543,13 @@ We calculate 3 types of learning rates in this file:
 
 For a detailed explanation of the theories behind the learning rates calculations and currency corrections, see our paper.
 
-## Method 1: Calculation of the uncorrected project-weighted learning rates 
-
-We don't describe this approach in our paper. Compare Method 2. The results for the uncorrected project-weighted are the same, though.
-
-To calculate the uncorrected project-weighted learning rates, we convert **all available project costs** to different currencies. We then derive the learning rate for each currency from the global average costs $C_{global,t,2017}^{i}$ of all available projects.
 
 ```{r}
 results_new <- list()
 ```
 
-### Step 1: Calculation of costs in every relevant currency
-In the first step, we calculate the value for each project in each relevant currency (`r currencies_print`).
 
-```{r Calculate uncorrected_project_weighted learning rates}
-
-projects_with_costs_in_currencies <- projects_with_costs_in_interval
-
-# add columns for each currency
-projects_with_costs_in_currencies[relevant_currencies] <- NA
-
-for(j in 1:nrow(projects_with_costs_in_currencies)){
-  
-  project_year_j = projects_with_costs_in_currencies[[j,"year"]]
-  local_currency_j = as.character(projects_with_costs_in_currencies[[j,"local_currency"]])
-
-  projects_with_costs_in_currencies[[j, base_currency]] <- #
-    projects_with_costs_in_currencies[[j,"local_value"]] * get_exchange_rate_for_project(exchange_rates_per_year, project_year_j, local_currency_j)
-  
-  
-  for(relevant_currency in relevant_currencies){
-    if(relevant_currency!=base_currency){
-      projects_with_costs_in_currencies[[j, relevant_currency]] <- #
-        projects_with_costs_in_currencies[[j, base_currency]] / get_exchange_rate_for_project(exchange_rates_per_year, project_year_j, relevant_currency)
-    }
-  }
-}
-
-rm(j, project_year_j, local_currency_j)
-
-
-```
-
-### Step 2. Aggregate data to means
-
-In the second step, we aggregate the data by yearly averages for each currency. 
-
-
-
-```{r aggregate to average costs, echo=TRUE}
-
-average_global_costs_uncor <- projects_with_costs_in_currencies %>% 
-  select(year, !!relevant_currencies) %>% 
-  gather("currency", "value", !!relevant_currencies) %>% 
-  group_by(currency, year) %>% 
-  summarise(nominal_costs = mean(value)) %>% 
-  ungroup()
-
-```
-
-### Step 3. Deflate to real values (2017)
-
-Here we deflate the average to 2017 real values if params\$deflate is set true. Currently: `r params$deflate`.
-
-```{r}
-average_global_costs_uncor <- convert_to_real_costs(average_global_costs_uncor, defl)
-```
-
-### Step 4. Calculation of learning rates
-
-We do a regression over global average costs P and cummulative capacity X to calculate the learning rate in each interval and for each currency.
-
-```{r Calculation of learning rates method 1}
-
-results_list <- list()
-
-for(j in seq_along(relevant_currencies)){
-  currency <- relevant_currencies[[j]]
-
-  for(i in seq_along(intervals)){
-    interval <- intervals[[i]]
-    interval_name <- names(intervals[i])
-    interval_years <- as.numeric(interval[1]):as.numeric(interval[2])
-    
-    regression_costs <- average_global_costs_uncor %>% 
-      filter(year %in% !!interval_years, currency == !!currency) %>% 
-      pull(average_costs)
-    
-    regression_cumulative_capacity <- X %>% 
-      filter(year %in% interval_years) %>% 
-      pull(X)
-    
-    l <- calculate_learning_rate(regression_costs, regression_cumulative_capacity)
-    
-    results_list[[paste0(currency,interval_name)]] <- to_results_list(l, currency, interval_name)
-    
-  }
-}
-
-results_new[["uncorrected_project_weighted"]] <- results_list %>% 
-  reduce(bind_rows) %>% 
-  add_column(type = factor("uncorrected_project_weighted")) %>% 
-  arrange_by_currencies(table_order_currency)
-
-rm(currency, results_list)
-  
-```
-
-### Results
-
-```{r Learning rate table, fig.cap="Simple learning rates in different intervals.", fig.width=fig.width.baseline * 0.7, fig.asp= 0.7}
-
-print_learning_rates_result(results_new[["uncorrected_project_weighted"]])
-
-```
-
-### Combined plot
-
-To plot all learning rates in the same plot, it is necessary to norm the costs. To do this, we select the initial year's average global costs and divide all average global costs by that value. We then get 1/W for all average costs and can compare the learning rates.
-
-```{r Combined and normed plot, echo=FALSE, fig.cap="Comparison of learning rates, as index of the average costs in 2006", fig.width=fig.width.baseline*output.size, fig.asp=0.4, out.width=out.width.default}
-
-combined_plot_data <- average_global_costs_uncor %>% 
-  inner_join(X) %>% 
-  filter(year >= T0, year <= T_max) %>% 
-  select(
-    year, 
-    average_costs, 
-    currency, 
-    cumulative_capacity = X) %>% 
-  mutate(currency = factor(currency, plot_order_currency))
-
-combined_plot_norm_data <- combined_plot_data %>% 
-  filter(year == T0) %>% 
-  select(norm_costs = average_costs, currency)
-  
-normed_plot_data <- combined_plot_data %>% 
-  inner_join(combined_plot_norm_data, by = "currency") %>% 
-  mutate(normed_average_costs = average_costs / norm_costs) %>% 
-  arrange(currency, year)
-
-normed_plot_data_subsets <- list()
-for(i in seq_along(intervals)){
-  interval <- intervals[[i]]
-  interval_name <- names(intervals[i])
-  interval_years <- as.numeric(interval[1]):as.numeric(interval[2])
-  
-  x_for_abclabel <- normed_plot_data %>% 
-    filter(year %in% interval_years[[1]]) %>% 
-    pull(cumulative_capacity)
-  x_for_abclabel <- x_for_abclabel[[1]]/1000
-  
-  normed_plot_data_subsets[[i]] <- normed_plot_data %>% 
-    filter(year %in% interval_years) %>% 
-    add_column(interval = interval_name) %>% 
-    add_column(x_for_abclabel = !!x_for_abclabel)
-}
-
-normed_plot_data_reduced <- normed_plot_data_subsets %>% 
-  reduce(bind_rows) %>% 
-  mutate(
-    interval = fct_relevel(interval, names(intervals)),
-    interval = fct_recode(interval,!!!plot_stips_label))
-
-plot_labels <- normed_plot_data_reduced %>% 
-  expand(interval) %>% 
-  add_column(label = letters[seq( from = 1, to = 3 )])
-
-normed_plot_data_reduced %>% 
-  mutate(year_for_text = if_else(currency == "GBP", str_sub(as.character(year), start = 3, end = 4) , "")) %>%
-  ggplot(aes(cumulative_capacity/1000, normed_average_costs)) +
-    geom_smooth(
-      aes(col = currency),
-      method="lm", formula = (y ~ x), se=FALSE) +
-    geom_point(aes(col = currency)) +
-    geom_text_repel(aes(label = year_for_text), vjust = -0.6, hjust = 0.1, size = 3, point.padding = NA) +
-    geom_text(data = plot_labels, mapping = aes(x = c(250,60,250), y = c(1.2,1.2,1.2), label = label), fontface = "bold") +
-
-    scale_x_continuous(trans="log", breaks = c(c(1,seq(2,10,2)) %o% 10^(0:4)), minor_breaks = 0.5) +
-    scale_y_continuous(trans="log", breaks = c(seq(0,1,0.1), seq(1.2,2,0.2)), minor_breaks = NULL) +
-    theme(legend.position="bottom") +
-    guides(
-      linetype = guide_legend(title="Learning rate", nrow = 1), 
-      col = guide_legend(title="Learning rate", nrow = 1), 
-      size = guide_legend(title="Type")) +
-    labs(x = "Cumulative capacity [GW]", 
-         y = paste0("Index of costs per MW")) +
-    scale_color_manual(values = plot_colours_currencies) +
-  facet_grid( ~ interval, scales = "free_x", space = "free_x")
-
-
-```
-\clearpage
-
-
-As asked by reviewer:
-
-```{r, fig.asp=0.4, out.width=out.width.default}
-
-normed_plot_data_reduced %>% 
-  mutate(year_for_text = if_else(currency == "GBP", str_sub(as.character(year), start = 3, end = 4) , "")) %>%
-  ggplot(aes(cumulative_capacity/1000, normed_average_costs)) +
-    geom_smooth(
-      aes(col = currency, linetype = interval),
-      method="lm", formula = (y ~ x), se=FALSE) +
-    #geom_point(aes(col = currency)) +
-    #geom_text_repel(aes(label = year_for_text), vjust = -0.6, hjust = 0.1, size = 3, point.padding = NA) +
-    #geom_text(data = plot_labels, mapping = aes(x = c(250,60,250), y = c(1.2,1.2,1.2), label = label), fontface = "bold") +
-
-    scale_x_continuous(trans="log", breaks = c(c(1,seq(2,10,2)) %o% 10^(0:4)), minor_breaks = 0.5) +
-    scale_y_continuous(trans="log", breaks = c(seq(0,1,0.1), seq(1.2,2,0.2)), minor_breaks = NULL) +
-    theme(legend.position="right") +
-    # guides(
-    #   linetype = guide_legend(title="Learning rate", nrow = 1), 
-    #   col = guide_legend(title="Learning rate", nrow = 1), 
-    #   size = guide_legend(title="Type")) +
-    labs(x = "Cumulative capacity [GW]", 
-         y = paste0("Index of costs per MW"),
-         linetype = "Interval",
-         col = "Currency") +
-    scale_color_manual(values = plot_colours_currencies) #+
-  #facet_grid( ~ , scales = "free_x", space = "free_x")
-
-
-```
-
-
-
-## Method 2: Calculation of all three types of learning rates 
+## Calculation of all three types of learning rates 
 
 In this part we calculate all three types of learning rates in the base currency **`r base_currency`**. The project-weighted uncorrected learning rate is the same as above, but calculated using an approach that is in line with our paper.
 
@@ -820,9 +599,19 @@ bind_rows(delta_BNEF,delta_IRENA) %>%
   get_delta_plot(plot_type = "absolute") +
   facet_grid(cols = vars(subset_name))
 
-bind_rows(delta_BNEF,delta_IRENA) %>% 
+
+
+bind_rows(
+  delta_BNEF %>% 
+  add_column(label = c("a",rep("", times = nrow(delta_BNEF)-1))),
+  
+  delta_IRENA %>% 
+  add_column(label = c("b",rep("", times = nrow(delta_IRENA)-1)))
+  ) %>% 
+  
   get_delta_plot(plot_type = "relative", legend = TRUE) +
-  facet_grid(cols = vars(subset_name))
+  facet_grid(cols = vars(subset_name)) +
+  geom_text(aes(label = label,x = 2006, y = 1.05), colour = "black")
 
 
 ```
@@ -928,7 +717,7 @@ for(t in all_years){
 
 P <- list()
 
-P[["uncorrected_project_weighted2"]] <- calculate_P(P_comp_pwt) #p -> we actually do the same calculation in Method 1, but do it here again to check if both give the same result. In the paper we describe the approach in this section.
+P[["uncorrected_project_weighted"]] <- calculate_P(P_comp_pwt) #p -> we actually do the same calculation in Method 1, but do it here again to check if both give the same result. In the paper we describe the approach in this section.
 
 P[["uncorrected_marketshare_weighted"]] <- calculate_P(P_comp) # P 
 P[["corrected_marketshare_weighted"]] <- calculate_P(P_comp_tilde) # P_tilde  
@@ -955,12 +744,12 @@ We do a regression over global average costs P and cummulative capacity X to cal
 ```{r Calculation of learning rates method 2}
 
 types <- c(
-  "uncorrected_project_weighted2",
+  "uncorrected_project_weighted",
   "uncorrected_marketshare_weighted",
   "corrected_marketshare_weighted")
 
 results_list <- list(
-  "uncorrected_project_weighted2" <- list(),
+  "uncorrected_project_weighted" <- list(),
   "uncorrected_marketshare_weighted" <- list(),
   "corrected_marketshare_weighted" <- list()
 )
@@ -995,49 +784,40 @@ for(type in types){
 rm(results_list)
 ```
 
-## Method 2: Results
+## Results
 
 We get the following learning rates using the corrected_marketshare_weighted learning rates approach:
 
 ```{r Results table}
 
 print_learning_rates_result(results_new[["uncorrected_project_weighted"]])
-print_learning_rates_result(results_new[["uncorrected_project_weighted2"]])
-
 print_learning_rates_result(results_new[["uncorrected_marketshare_weighted"]])
 print_learning_rates_result(results_new[["corrected_marketshare_weighted"]])
 
 ```
 
-## Combined plot of simple and corrected_marketshare_weighted learning rates
 
-Comparison with the simple learning rates for every country
-
-```{r Combined plot, fig.cap="Learning rates plot", fig.asp=0.4}
-
-#mypal = pal_npg("nrc")(length(relevant_currencies))
-
-corrected_rates <- results_new$corrected_marketshare_weighted %>% 
-  select(corrected_lr = estimate, interval)
-
-bind_rows(
-  results_new$corrected_marketshare_weighted %>% 
-    add_column(legend = factor("fx-corrected (USD)")),
-  results_new$uncorrected_project_weighted %>% 
-    mutate(legend = currency)
-  ) %>%    
-  get_comparison_plot(corrected_rates)
-
-```
 
 ```{r Save results to csv}
-
 
 results_new %>% 
   reduce(bind_rows) %>% 
   filter(type!="uncorrected_project_weighted2") %>% 
   add_column(version = version) %>% 
   write_csv(paste0("output/results/learning_rate_results_",params$base_currency,"_",version,".csv"))
+
+  
+P %>% 
+  map_dfr(bind_rows, .id = "type") %>%  
+  add_column(version = version) %>% 
+  write_csv(paste0("output/results/learning_rate_average_costs_",params$base_currency,"_",version,".csv"))
+
+
+X %>% 
+  write_csv(paste0("output/results/learning_rate_cum_cap.csv"))
+
+
+
 
 ```
 
