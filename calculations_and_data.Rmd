@@ -19,10 +19,11 @@ params:
   base_currency: USD
   exchange_rate_norm_year: 2006
   deflate: yes
-  default_digits: 2
+  default_digits: 5
   debug: no
   use_kable: no
   run_test: no
+  save: no
 bibliography: bib.bib
 ---
 
@@ -493,7 +494,7 @@ delfator_plot <- defl_plot %>%
 inflator_plot <- cpi_inflator %>% 
   mutate(year = ymd(paste(year,"-01-01"))) %>% 
   left_join(currency_to_currency_area_translation) %>% 
-  ggplot(aes(year, rate, col = currency_area, linetype = currency_area)) + 
+  ggplot(aes(year, rate - 1, col = currency_area, linetype = currency_area)) + 
     geom_line() + 
     scale_linetype_manual(values=plot_order_linetype) +
     scale_colour_manual(values = plot_colours_country) + 
@@ -790,7 +791,7 @@ We get the following learning rates using the corrected_marketshare_weighted lea
 
 ```{r Results table}
 
-print_learning_rates_result(results_new[["uncorrected_project_weighted"]])
+#print_learning_rates_result(results_new[["uncorrected_project_weighted"]])
 print_learning_rates_result(results_new[["uncorrected_marketshare_weighted"]])
 print_learning_rates_result(results_new[["corrected_marketshare_weighted"]])
 
@@ -800,22 +801,26 @@ print_learning_rates_result(results_new[["corrected_marketshare_weighted"]])
 
 ```{r Save results to csv}
 
-results_new %>% 
-  reduce(bind_rows) %>% 
-  filter(type!="uncorrected_project_weighted2") %>% 
-  add_column(version = version) %>% 
-  write_csv(paste0("output/results/learning_rate_results_",params$base_currency,"_",version,".csv"))
-
+if(params$save){
   
-P %>% 
-  map_dfr(bind_rows, .id = "type") %>%  
-  add_column(version = version) %>% 
-  write_csv(paste0("output/results/learning_rate_average_costs_",params$base_currency,"_",version,".csv"))
+  results_new %>% 
+    reduce(bind_rows) %>% 
+    filter(type!="uncorrected_project_weighted2") %>% 
+    add_column(version = version) %>% 
+    write_csv(paste0("output/results/learning_rate_results_",params$base_currency,"_",version,".csv"))
+  
+    
+  P %>% 
+    map_dfr(bind_rows, .id = "type") %>%  
+    add_column(version = version) %>% 
+    write_csv(paste0("output/results/learning_rate_average_costs_",params$base_currency,"_",version,".csv"))
+  
+  
+  X %>% 
+    write_csv(paste0("output/results/learning_rate_cum_cap.csv"))
 
 
-X %>% 
-  write_csv(paste0("output/results/learning_rate_cum_cap.csv"))
-
+}
 
 
 

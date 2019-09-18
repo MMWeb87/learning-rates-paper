@@ -205,7 +205,7 @@ get_comparison_plot <- function(df, corrected_rates){
     ggplot(aes(fill = legend, y = lr, x = legend)) + 
     geom_bar(position="dodge", stat="identity") +
     geom_hline(aes(yintercept = corrected_lr)) + 
-    geom_segment(. %>% filter(legend %in% relevant_currencies), 
+    geom_segment(. %>% filter(legend %in% relevant_currencies, diff > 0.1 | diff < -0.1 ), 
                  mapping=aes(x = legend, xend = legend, y = corrected_lr, yend=lr), 
                  arrow = arrow(length = unit(0.05, "inches"), type = "closed"), 
                  size = 1, color="black") +

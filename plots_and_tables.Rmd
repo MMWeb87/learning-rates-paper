@@ -267,7 +267,7 @@ bind_rows(
     filter(
       type == "uncorrected_marketshare_weighted") %>% 
     mutate(legend = currency)
-  ) %>% 
+  ) %>%  
   get_comparison_plot(corrected_rates)
 
 
