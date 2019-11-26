@@ -23,9 +23,10 @@ for(report_currency in report_currencies){
 
 # files
 rmarkdown::render("calculations_and_data.Rmd", output_format = "pdf_document",
-                  output_file = paste0(filename, ".pdf"), output_dir = "output/reports_files/",
+                  output_file = paste0(filename, ".pdf"), output_dir = "output/reports_files_final/",
                   params = list(use_kable = TRUE))
 
 
 rmarkdown::render("plots_and_tables.Rmd", output_format = "pdf_document", 
-                  output_file = paste0("all_results.pdf"), output_dir = "output/reports_files/")
+                  output_file = paste0("all_results.pdf"), output_dir = "output/reports_files_final/")
+ 

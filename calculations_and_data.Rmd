@@ -59,7 +59,13 @@ knitr::opts_chunk$set(
 
 theme_set(theme_bw(base_size = 9.5) + theme(
   legend.title=element_blank(),
+  panel.grid.major = element_blank(), 
+  panel.grid.minor = element_blank(),
+  # strip.background = element_blank(),
+  # strip.text.x = element_blank(),
+  # strip.text.y = element_blank(),
   legend.spacing.x = unit(0.1, 'cm')))
+
 
 ```
 
@@ -612,7 +618,7 @@ bind_rows(
   
   get_delta_plot(plot_type = "relative", legend = TRUE) +
   facet_grid(cols = vars(subset_name)) +
-  geom_text(aes(label = label,x = 2006, y = 1.05), colour = "black")
+  geom_text(aes(label = label,x = 2006, y = 1.05), colour = "black", fontface='bold')
 
 
 ```

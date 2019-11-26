@@ -32,7 +32,14 @@ knitr::opts_chunk$set(
   fig.width=fig.width.baseline*output.size, 
   out.width=out.width.default)
 
-theme_set(theme_bw(base_size = 9.5) + theme(legend.title=element_blank()))
+theme_set(theme_bw(base_size = 9.5) + theme(
+  panel.grid.major = element_blank(), 
+  panel.grid.minor = element_blank(),
+  strip.background = element_blank(),
+  strip.text.x = element_blank(),
+  strip.text.y = element_blank(),
+
+  legend.title=element_blank()))
 
 ```
 
@@ -148,13 +155,16 @@ plot_labels <- normed_plot_data_reduced %>%
   add_column(label = letters[seq( from = 1, to = 3 )])
 
 normed_plot_data_reduced %>% 
-  mutate(year_for_text = if_else(currency == "GBP", str_sub(as.character(year), start = 3, end = 4) , "")) %>%
-  ggplot(aes(cumulative_capacity/1000, normed_average_costs)) +
+  #mutate(year_for_text = if_else(currency == "GBP", str_sub(as.character(year), start = 3, end = 4) , "")) %>%
+  mutate(year_for_text = if_else(currency == "GBP", as.character(year), "")) %>%
+
+    ggplot(aes(cumulative_capacity/1000, normed_average_costs)) +
     geom_smooth(
       aes(col = currency),
       method="lm", formula = (y ~ x), se=FALSE) +
     geom_point(aes(col = currency)) +
-    geom_text_repel(aes(label = year_for_text), vjust = -0.6, hjust = 0.1, size = 3, point.padding = NA) +
+    geom_text_repel(aes(label = year_for_text), vjust = -0.8, hjust = 0.1, size = 3, point.padding = NA) +  
+    #geom_text(aes(label = year_for_text, y = 1.8), size = 2.5, angle = 90, hjust = 0.7, point.padding = NA) +
     geom_text(data = plot_labels, mapping = aes(x = c(250,60,250), y = c(1.2,1.2,1.2), label = label), fontface = "bold") +
 
     scale_x_continuous(trans="log", breaks = c(c(1,seq(2,10,2)) %o% 10^(0:4)), minor_breaks = 0.5) +
